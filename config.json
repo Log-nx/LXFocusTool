@@ -1,0 +1,32 @@
+{
+  "timer_duration": 3000,
+  "default_app": "notepad.exe",
+  "theme": "clam",
+  "window_size": {
+    "width": 450,
+    "height": 700,
+    "min_width": 400,
+    "min_height": 600
+  },
+  "colors": {
+    "background": "#2b2b2b",
+    "frame_background": "#3c3c3c",
+    "accent": "#4a9eff",
+    "text": "#ffffff",
+    "secondary_text": "#b0b0b0",
+    "success": "#28a745",
+    "danger": "#dc3545",
+    "warning": "#ffc107",
+    "info": "#17a2b8"
+  },
+  "fonts": {
+    "title": "Segoe UI",
+    "body": "Segoe UI",
+    "monospace": "Consolas"
+  },
+  "auto_save_interval": 30,
+  "sound_notifications": true,
+  "break_duration": 300,
+  "transparency": 0.95,
+  "glass_effect": true
+}

@@ -1,0 +1,15 @@
+# Focus Tool Dependencies
+# All other imports are from Python standard library
+
+# No external packages required - uses only built-in Python modules:
+# - tkinter (GUI framework)
+# - json (data persistence)
+# - os (file operations)
+# - threading (timer functionality)
+# - time (timer delays)
+# - random (animation randomization)
+# - logging (debug logging)
+# - datetime (timestamps)
+# - subprocess (app launching)
+# - sys (system operations)
+# - math (hexagon calculations)
