@@ -49,21 +49,6 @@ python focus_tool.py
 - **Delete** - Remove individual tasks
 - **Clear All** - Remove all tasks with confirmation
 
-### Window Controls
-- **Minimize** - Reduce to taskbar
-- **Expand/Collapse** - Toggle between compact and full view
-- **Close** - Exit application
-- **Drag** - Move window by title bar
-- **Resize** - Drag edges/corners to resize
-
-## 🎨 Design Features
-
-- **Custom Title Bar** - No default Windows decorations
-- **Glass Effect** - Semi-transparent, modern appearance
-- **Responsive Layout** - Adapts to window size changes
-- **Smooth Animations** - Subtle hexagonal wave background
-- **Professional Colors** - Dark theme with blue accents
-
 ## 📁 Project Structure
 
 ```
