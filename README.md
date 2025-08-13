@@ -53,7 +53,7 @@ focus-tool/
 
 The application automatically saves your preferences and tasks. Customize colors, fonts, and behavior by modifying the configuration in `focus_tool.py`.
 
-<img width="454" height="1103" alt="image" src="https://github.com/user-attachments/assets/7c489023-795b-4aa8-b5cb-3468ae438786" />
+<img width="290" height="530" alt="image" src="https://github.com/user-attachments/assets/7c489023-795b-4aa8-b5cb-3468ae438786" />
 
 ## 🐛 Troubleshooting
 
