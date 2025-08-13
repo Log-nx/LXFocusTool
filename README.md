@@ -1,6 +1,6 @@
-# 🎯 Focus Tool
+# 🎯 Log's Little Focus Tool
 
-> A beautiful, minimalist focus and productivity application with a modern glass aesthetic
+> A minimalist focus and productivity application.
 
 ![Focus Tool](https://img.shields.io/badge/Python-3.7+-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)
@@ -8,12 +8,11 @@
 
 ## ✨ Features
 
-- **⏱️ 50-Minute Focus Timer** - Perfect for Pomodoro sessions
+- **⏱️ Focus Timer** - Perfect for Pomodoro sessions
 - **📝 Task Management** - Add, complete, delete, and clear tasks
 - **🚀 Quick App Launcher** - Launch applications instantly
-- **🎨 Modern Glass UI** - Beautiful, borderless design with custom controls
+- **🎨 Glass Style UI** - Borderless design with custom controls
 - **🔧 Fully Resizable** - Custom resize handles for perfect positioning
-- **✨ Subtle Animations** - Elegant hexagonal wave background
 - **💾 Persistent Storage** - Tasks saved automatically
 
 ## 🚀 Quick Start
