@@ -36,19 +36,6 @@ python focus_tool.py
 - **PowerShell**: Run `check_python.ps1` for environment check
 - **Cross-platform**: Use `run_focus_tool.py`
 
-## 🎮 Usage
-
-### Timer Controls
-- **Start** - Begin 50-minute focus session
-- **Stop** - Pause the timer
-- **Reset** - Return to 50:00
-
-### Task Management
-- **Add Task** - Type and press Enter or click Add
-- **Complete** - Mark tasks as done (green checkmark)
-- **Delete** - Remove individual tasks
-- **Clear All** - Remove all tasks with confirmation
-
 ## 📁 Project Structure
 
 ```
@@ -80,6 +67,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
----
 
 **Built with ❤️ using Python and Tkinter**

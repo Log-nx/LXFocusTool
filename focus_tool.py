@@ -22,77 +22,58 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class HexagonWave:
-    def __init__(self, canvas_width, canvas_height):
-        self.x = random.randint(0, canvas_width)
-        self.y = random.randint(0, canvas_height)
-        self.size = random.randint(6, 12)  # Smaller hexagons
-        self.phase = random.uniform(0, 2 * 3.14159)  # Random starting phase
-        self.speed = random.uniform(0.01, 0.02)  # Much slower wave speed
-        self.opacity = random.uniform(0.05, 0.15)  # Much more subtle opacity
-        logger.debug(f"Created hexagon at ({self.x}, {self.y}) with size {self.size}")
-    
-    def update(self, canvas_width, canvas_height):
-        # Slowly change the phase for wave effect
-        self.phase += self.speed
-        if self.phase > 2 * 3.14159:
-            self.phase = 0
-        
-        # Calculate wave opacity (fade in and out)
-        self.current_opacity = self.opacity * (0.3 + 0.7 * math.sin(self.phase))
-        
-        # Much rarer position reset for better performance
-        if random.random() < 0.0001:  # Very rare reset
-            self.x = random.randint(0, canvas_width)
-            self.y = random.randint(0, canvas_height)
+class HexagonGrid:
+    def __init__(self, x, y, size):
+        self.x = x
+        self.y = y
+        self.size = size
 
-class AnimatedBackground(tk.Canvas):
+class StaticHexagonBackground(tk.Canvas):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
         self.hexagons = []
-        self.animation_running = False
-        logger.info("Initializing AnimatedBackground with hexagon waves")
-        self.setup_animation()
+        self.grid_spacing = 40  # Spacing between hexagons
+        self.hexagon_size = 8   # Size of each hexagon
+        logger.info("Initializing StaticHexagonBackground with hexagon grid")
+        self.setup_background()
     
-    def setup_animation(self):
+    def setup_background(self):
         self.configure(bg='#1e1e1e', highlightthickness=0)
         self.bind('<Configure>', self.on_resize)
-        self.create_hexagons()
-        self.start_animation()
-        logger.info("Hexagon wave animation setup complete")
+        self.create_hexagon_grid()
+        logger.info("Static hexagon grid background setup complete")
     
-    def create_hexagons(self):
+    def create_hexagon_grid(self):
         canvas_width = self.winfo_width() or 450
         canvas_height = self.winfo_height() or 700
         
-        # Create fewer hexagons for much better performance
-        for i in range(8):  # Reduced from 15 to 8
-            hexagon = HexagonWave(canvas_width, canvas_height)
-            self.hexagons.append(hexagon)
-        logger.info(f"Created {len(self.hexagons)} hexagons")
+        self.hexagons = []
+        
+        # Create a regular grid of hexagons
+        for y in range(0, canvas_height + self.grid_spacing, self.grid_spacing):
+            for x in range(0, canvas_width + self.grid_spacing, self.grid_spacing):
+                # Offset every other row for proper hexagon grid
+                offset_x = x + (self.grid_spacing // 2) if (y // self.grid_spacing) % 2 == 1 else x
+                hexagon = HexagonGrid(offset_x, y, self.hexagon_size)
+                self.hexagons.append(hexagon)
+        
+        # Draw all hexagons immediately
+        self.draw_all_hexagons()
+        logger.info(f"Created and drew {len(self.hexagons)} hexagons in grid pattern")
     
     def on_resize(self, event):
         if event.width > 1 and event.height > 1:
-            logger.debug(f"Canvas resize event: {event.width}x{event.height}")
+            # Reduced logging for better performance
             self.delete("hexagon")
-            self.create_hexagons()
+            self.create_hexagon_grid()
     
-    def start_animation(self):
-        self.animation_running = True
-        logger.info("Starting hexagon wave animation")
-        self.animate_frame()
-    
-    def stop_animation(self):
-        self.animation_running = False
-        logger.info("Stopping hexagon wave animation")
-    
-    def draw_hexagon(self, x, y, size, opacity):
-        """Draw a hexagon at the given position with the given size and opacity"""
+    def draw_hexagon(self, x, y, size):
+        """Draw a hexagon at the given position with the given size"""
         try:
             # Validate coordinates and size
             if not (isinstance(x, (int, float)) and isinstance(y, (int, float)) and isinstance(size, (int, float))):
                 return
-            if size <= 0 or opacity <= 0:
+            if size <= 0:
                 return
             
             # Calculate hexagon points
@@ -103,52 +84,23 @@ class AnimatedBackground(tk.Canvas):
                 py = y + size * math.sin(angle)
                 points.extend([px, py])
             
-            # Use simple color with stipple for opacity effect instead of hex color
-            color = '#4a9eff'
+            # Use dark grey color for static grid
+            color = '#404040'  # Dark grey
             self.create_polygon(
                 points,
                 fill='',
                 outline=color,
                 width=1,
-                tags="hexagon",
-                stipple='gray50' if opacity < 0.2 else 'gray25'
+                tags="hexagon"
             )
         except Exception as e:
-            logger.error(f"Error drawing hexagon: {e}")
+            # Reduced logging for better performance
+            pass
     
-    def animate_frame(self):
-        if not self.animation_running:
-            return
-        
-        try:
-            self.delete("hexagon")
-            canvas_width = self.winfo_width() or 450
-            canvas_height = self.winfo_height() or 700
-            
-            for hexagon in self.hexagons:
-                try:
-                    hexagon.update(canvas_width, canvas_height)
-                    
-                    # Only draw if opacity is visible enough
-                    if hexagon.current_opacity > 0.05:
-                        self.draw_hexagon(
-                            hexagon.x, 
-                            hexagon.y, 
-                            hexagon.size, 
-                            hexagon.current_opacity
-                        )
-                except Exception as e:
-                    logger.error(f"Error updating hexagon: {e}")
-                    continue
-            
-            # Much slower frame rate for better performance
-            self.after(33, self.animate_frame)  # 30fps instead of 10fps
-            
-        except Exception as e:
-            logger.error(f"Error in animation frame: {e}")
-            # Try to continue animation
-            if self.animation_running:
-                self.after(33, self.animate_frame)  # 30fps
+    def draw_all_hexagons(self):
+        """Draw all hexagons in the grid"""
+        for hexagon in self.hexagons:
+            self.draw_hexagon(hexagon.x, hexagon.y, hexagon.size)
 
 class CustomTitleBar(tk.Frame):
     def __init__(self, parent, title, **kwargs):
@@ -217,7 +169,7 @@ class CustomTitleBar(tk.Frame):
     def start_drag(self, event):
         self.x = event.x
         self.y = event.y
-        logger.debug(f"Drag started at ({self.x}, {self.y})")
+        # Removed logging during drag start to improve performance
     
     def on_drag(self, event):
         deltax = event.x - self.x
@@ -225,7 +177,7 @@ class CustomTitleBar(tk.Frame):
         x = self.parent.winfo_x() + deltax
         y = self.parent.winfo_y() + deltay
         self.parent.geometry(f"+{x}+{y}")
-        logger.debug(f"Dragging to ({x}, {y})")
+        # Removed logging during drag to improve performance
     
     def minimize(self):
         logger.info("Minimizing window")
@@ -336,6 +288,7 @@ class FocusTool:
         self.tasks = []
         self.timer_running = False
         self.time_remaining = 50 * 60
+        self.original_time_minutes = 50  # Store original time for completion message
         self.timer_thread = None
         
         self.load_tasks()
@@ -375,7 +328,6 @@ class FocusTool:
         try:
             # Get current window state
             geometry = self.root.geometry()
-            logger.debug(f"Raw geometry string: {geometry}")
             
             # Parse geometry string (e.g., "450x700+100+200" or "450x700")
             if 'x' in geometry:
@@ -403,15 +355,17 @@ class FocusTool:
                     with open('window_config.json', 'w') as f:
                         json.dump(config, f, indent=2)
                     
-                    logger.info(f"Saved window config: {width}x{height} at ({x}, {y})")
+                    # Only log when actually saving, not during the save process
+                    logger.debug(f"Window config saved: {width}x{height} at ({x}, {y})")
                 else:
-                    logger.warning(f"Invalid geometry format: {geometry}")
+                    # Reduced logging for better performance
+                    pass
             else:
-                logger.warning(f"Geometry string missing 'x': {geometry}")
+                # Reduced logging for better performance
+                pass
                 
         except Exception as e:
             logger.error(f"Error saving window config: {e}")
-            logger.error(f"Geometry string was: {geometry}")
     
     def center_window(self):
         self.root.update_idletasks()
@@ -442,10 +396,10 @@ class FocusTool:
         main_frame.pack(fill='both', expand=True)
         logger.info("Main frame created and packed")
         
-        # Animated background - place it behind the main content
-        self.background = AnimatedBackground(main_frame, width=410, height=660)
+        # Static hexagon background - place it behind the main content
+        self.background = StaticHexagonBackground(main_frame, width=410, height=660)
         self.background.place(relx=0, rely=0, relwidth=1, relheight=1)
-        logger.info("Animated background placed behind UI")
+        logger.info("Static hexagon background placed behind UI")
         
         # Configure grid weights for responsive layout
         self.root.columnconfigure(0, weight=1)
@@ -526,7 +480,7 @@ class FocusTool:
         handle.bind('<Button-1>', lambda e, pos=position: self.start_resize(e, pos))
         handle.bind('<B1-Motion>', lambda e, pos=position: self.on_resize(e, pos))
         
-        logger.debug(f"Created corner handle: {position}")
+        # Reduced logging for better performance
     
     def create_edge_handle(self, position, relx, rely, relwidth, relheight):
         """Create an edge resize handle"""
@@ -542,7 +496,7 @@ class FocusTool:
         handle.bind('<Button-1>', lambda e, pos=position: self.start_resize(e, pos))
         handle.bind('<B1-Motion>', lambda e, pos=position: self.on_resize(e, pos))
         
-        logger.debug(f"Created edge handle: {position}")
+        # Reduced logging for better performance
     
     def start_resize(self, event, position=None):
         """Start resize operation"""
@@ -576,7 +530,7 @@ class FocusTool:
         self.start_width = self.root.winfo_width()
         self.start_height = self.root.winfo_height()
         
-        logger.debug(f"Resize started from {position} at ({self.start_x}, {self.start_y})")
+        # Reduced logging for better performance
     
     def on_resize(self, event, position=None):
         """Handle resize operation"""
@@ -607,7 +561,7 @@ class FocusTool:
         # Apply new geometry
         if new_width != self.start_width or new_height != self.start_height:
             self.root.geometry(f"{new_width}x{new_height}")
-            logger.debug(f"Resized to {new_width}x{new_height} from {position}")
+            # Removed logging during resize to improve performance
     
     def setup_timer_section(self):
         logger.info("Setting up timer section")
@@ -620,7 +574,55 @@ class FocusTool:
                                    pady=25)
         self.timer_label.pack(pady=(25, 25))
         
-        # Timer buttons with proper layout
+        # Timer selection buttons
+        time_select_frame = tk.Frame(content, bg='#2d2d2d')
+        time_select_frame.pack(pady=(0, 20))
+        
+        # Preset time buttons
+        preset_frame = tk.Frame(time_select_frame, bg='#2d2d2d')
+        preset_frame.pack()
+        
+        time_20_btn = tk.Button(preset_frame, text="20m", 
+                                font=("Segoe UI", 9, "bold"),
+                                bg='#17a2b8', fg='#ffffff',
+                                relief='flat', borderwidth=0,
+                                padx=15, pady=8,
+                                command=lambda: self.set_timer(20),
+                                activebackground='#138496',
+                                activeforeground='#ffffff')
+        time_20_btn.pack(side='left', padx=(0, 10))
+        
+        time_50_btn = tk.Button(preset_frame, text="50m", 
+                                font=("Segoe UI", 9, "bold"),
+                                bg='#28a745', fg='#ffffff',
+                                relief='flat', borderwidth=0,
+                                padx=15, pady=8,
+                                command=lambda: self.set_timer(50),
+                                activebackground='#218838',
+                                activeforeground='#ffffff')
+        time_50_btn.pack(side='left', padx=(0, 10))
+        
+        time_120_btn = tk.Button(preset_frame, text="120m", 
+                                 font=("Segoe UI", 9, "bold"),
+                                 bg='#fd7e14', fg='#ffffff',
+                                 relief='flat', borderwidth=0,
+                                 padx=15, pady=8,
+                                 command=lambda: self.set_timer(120),
+                                 activebackground='#e8690b',
+                                 activeforeground='#ffffff')
+        time_120_btn.pack(side='left', padx=(0, 10))
+        
+        custom_btn = tk.Button(preset_frame, text="Custom", 
+                               font=("Segoe UI", 9, "bold"),
+                               bg='#6f42c1', fg='#ffffff',
+                               relief='flat', borderwidth=0,
+                               padx=15, pady=8,
+                               command=self.set_custom_timer,
+                               activebackground='#5a32a3',
+                               activeforeground='#ffffff')
+        custom_btn.pack(side='left', padx=(0, 10))
+        
+        # Timer control buttons with proper layout
         button_frame = tk.Frame(content, bg='#2d2d2d')
         button_frame.pack(pady=(0, 25))
         
@@ -799,10 +801,8 @@ class FocusTool:
             # Ensure minimum size is maintained
             if event.width < 400:
                 self.root.geometry(f"400x{event.height}")
-                logger.info(f"Enforcing minimum width: 400x{event.height}")
             if event.height < 600:
                 self.root.geometry(f"{event.width}x600")
-                logger.info(f"Enforcing minimum height: {event.width}x600")
             
             # Save window config after resize (but don't log every resize)
             self.save_window_config()
@@ -824,10 +824,85 @@ class FocusTool:
         self.start_button.config(state="normal", bg='#4a9eff')
         self.stop_button.config(state="disabled", bg='#666666')
     
+    def set_timer(self, minutes):
+        """Set timer to specified number of minutes"""
+        logger.info(f"Setting timer to {minutes} minutes")
+        self.stop_timer()
+        self.time_remaining = minutes * 60
+        self.original_time_minutes = minutes
+        self.update_timer_display()
+    
+    def set_custom_timer(self):
+        """Open dialog for custom timer input"""
+        logger.info("Opening custom timer dialog")
+        
+        # Create custom timer dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Custom Timer")
+        dialog.geometry("300x150")
+        dialog.configure(bg='#2d2d2d')
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center dialog on parent window
+        dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 75, self.root.winfo_rooty() + 275))
+        
+        # Input frame
+        input_frame = tk.Frame(dialog, bg='#2d2d2d')
+        input_frame.pack(pady=20)
+        
+        tk.Label(input_frame, text="Enter minutes:", 
+                font=("Segoe UI", 10), bg='#2d2d2d', fg='#ffffff').pack()
+        
+        time_entry = tk.Entry(input_frame, font=("Segoe UI", 12), width=10)
+        time_entry.pack(pady=10)
+        time_entry.focus()
+        time_entry.bind('<Return>', lambda e: self.apply_custom_timer(dialog, time_entry))
+        
+        # Button frame
+        button_frame = tk.Frame(dialog, bg='#2d2d2d')
+        button_frame.pack(pady=10)
+        
+        tk.Button(button_frame, text="Set", 
+                 font=("Segoe UI", 9, "bold"),
+                 bg='#4a9eff', fg='#ffffff',
+                 relief='flat', borderwidth=0,
+                 padx=20, pady=5,
+                 command=lambda: self.apply_custom_timer(dialog, time_entry),
+                 activebackground='#3a8eef',
+                 activeforeground='#ffffff').pack(side='left', padx=(0, 10))
+        
+        tk.Button(button_frame, text="Cancel", 
+                 font=("Segoe UI", 9, "bold"),
+                 bg='#666666', fg='#ffffff',
+                 relief='flat', borderwidth=0,
+                 padx=20, pady=5,
+                 command=dialog.destroy,
+                 activebackground='#555555',
+                 activeforeground='#ffffff').pack(side='left')
+    
+    def apply_custom_timer(self, dialog, time_entry):
+        """Apply custom timer value from dialog"""
+        try:
+            minutes = int(time_entry.get().strip())
+            if minutes > 0 and minutes <= 1440:  # Max 24 hours
+                logger.info(f"Setting custom timer to {minutes} minutes")
+                self.stop_timer()
+                self.time_remaining = minutes * 60
+                self.original_time_minutes = minutes
+                self.update_timer_display()
+                dialog.destroy()
+            else:
+                messagebox.showerror("Invalid Time", "Please enter a time between 1 and 1440 minutes (24 hours)")
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter a valid number of minutes")
+    
     def reset_timer(self):
         logger.info("Resetting timer")
         self.stop_timer()
         self.time_remaining = 50 * 60
+        self.original_time_minutes = 50
         self.update_timer_display()
     
     def timer_loop(self):
@@ -852,8 +927,13 @@ class FocusTool:
         self.timer_running = False
         self.start_button.config(state="normal", bg='#4a9eff')
         self.stop_button.config(state="disabled", bg='#666666')
-        messagebox.showinfo("Timer Complete", "50-minute focus session completed!")
+        
+        # Use stored original time for completion message
+        messagebox.showinfo("Timer Complete", f"{self.original_time_minutes}-minute focus session completed!")
+        
+        # Reset to default 50 minutes
         self.time_remaining = 50 * 60
+        self.original_time_minutes = 50
         self.update_timer_display()
     
     def add_task(self):
@@ -980,8 +1060,6 @@ def main():
             try:
                 app.save_tasks()
                 app.save_window_config() # Save window config on closing
-                if hasattr(app, 'background'):
-                    app.background.stop_animation()
             except Exception as e:
                 logger.error(f"Error during cleanup: {e}")
             finally:
