@@ -286,10 +286,44 @@ class FocusTool:
         # No custom title bar - using Windows native one
         logger.info("Using Windows native title bar")
         
+        # Create scrollable main container with dark-mode scrollbar
+        # Canvas for scrolling
+        self.main_canvas = tk.Canvas(self.root, bg=bg_color, highlightthickness=0)
+        self.main_canvas.pack(side='left', fill='both', expand=True)
+        
         # Main container with glass padding (adjusted for native title bar)
-        main_frame = tk.Frame(self.root, bg=bg_color, padx=20, pady=20)
-        main_frame.pack(fill='both', expand=True)
-        logger.info("Main frame created and packed")
+        main_frame = tk.Frame(self.main_canvas, bg=bg_color, padx=20, pady=20)
+        self.main_canvas.create_window((0, 0), window=main_frame, anchor='nw')
+        
+        # Configure canvas scrolling
+        main_frame.bind('<Configure>', lambda e: self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all")))
+        
+        # Dark-mode scrollbar for main window (only visible on hover)
+        self.main_scrollbar = tk.Scrollbar(self.root, 
+                                          orient='vertical',
+                                          bg='#606060',
+                                          activebackground='#4a9eff',
+                                          troughcolor='#2d2d2d',
+                                          width=12,
+                                          relief='flat',
+                                          borderwidth=0)
+        self.main_scrollbar.pack(side='right', fill='y')
+        
+        # Configure scrollbar
+        self.main_scrollbar.config(command=self.main_canvas.yview)
+        self.main_canvas.config(yscrollcommand=self.main_scrollbar.set)
+        
+        # Initially hide main scrollbar
+        self.main_scrollbar.pack_forget()
+        
+        # Bind scrollbar hover events
+        self.main_scrollbar.bind('<Enter>', self.show_main_scrollbar)
+        self.main_scrollbar.bind('<Leave>', self.hide_main_scrollbar)
+        
+        # Check if main scrollbar should be available
+        self.check_main_scrollbar_need()
+        
+        logger.info("Scrollable main frame with hover scrollbar created and packed")
         
         # Static hexagon background - place it behind the main content
         self.background = StaticHexagonBackground(main_frame, width=410, height=680)
@@ -334,6 +368,11 @@ class FocusTool:
         
         # Bind window resize event (no saving here to avoid spam)
         self.root.bind('<Configure>', self.on_window_resize)
+        
+        # Bind mouse wheel scrolling for main window when hovering over content
+        self.main_canvas.bind('<MouseWheel>', self.on_main_scroll)
+        self.main_canvas.bind('<Button-4>', self.on_main_scroll)
+        self.main_canvas.bind('<Button-5>', self.on_main_scroll)
 
         # No custom resize handles needed with native title bar
         
@@ -471,21 +510,55 @@ class FocusTool:
                               activeforeground='#ffffff')
         add_button.pack(side='right')
         
-        # Task list with glass styling
+                # Task list with glass styling and scrollbar
         list_frame = tk.Frame(content, bg='#2d2d2d')
         list_frame.pack(fill='both', expand=True, padx=20, pady=(0, 15))
         
+        # Create scrollbar frame with proper spacing
+        scrollbar_frame = tk.Frame(list_frame, bg='#2d2d2d', width=12)
+        scrollbar_frame.pack(side='right', fill='y', padx=(5, 0))
+        scrollbar_frame.pack_propagate(False)
+        
+        # Mini scrollbar (only visible when needed) - make it more visible
+        self.task_scrollbar = tk.Scrollbar(scrollbar_frame, 
+                                          orient='vertical',
+                                          bg='#606060',
+                                          activebackground='#4a9eff',
+                                          troughcolor='#2d2d2d',
+                                          width=8,
+                                          relief='flat',
+                                          borderwidth=0)
+        self.task_scrollbar.pack(fill='y', expand=True)
+        
+        # Initially hide scrollbar
+        self.task_scrollbar.pack_forget()
+        
+        # Task listbox with scrollbar
         self.task_listbox = tk.Listbox(list_frame, 
-                                      height=6, 
-                                      font=("Segoe UI", 9),
-                                      bg='#1e1e1e', fg='#ffffff',
-                                      selectbackground='#4a9eff',
-                                      selectforeground='#ffffff',
-                                      relief='flat', borderwidth=1,
-                                      highlightthickness=1,
-                                      highlightbackground='#4a9eff',
-                                      highlightcolor='#4a9eff')
-        self.task_listbox.pack(fill='both', expand=True)
+                                       height=6, 
+                                       font=("Segoe UI", 9),
+                                       bg='#1e1e1e', fg='#ffffff',
+                                       selectbackground='#4a9eff',
+                                       selectforeground='#ffffff',
+                                       relief='flat', borderwidth=1,
+                                       highlightthickness=1,
+                                       highlightbackground='#4a9eff',
+                                       highlightcolor='#4a9eff',
+                                       yscrollcommand=self.task_scrollbar.set)
+        self.task_listbox.pack(side='left', fill='both', expand=True)
+        
+        # Configure scrollbar
+        self.task_scrollbar.config(command=self.task_listbox.yview)
+        
+        # Bind mouse wheel scrolling to both listbox and scrollbar frame
+        self.task_listbox.bind('<MouseWheel>', self.on_task_scroll)
+        self.task_listbox.bind('<Button-4>', self.on_task_scroll)
+        self.task_listbox.bind('<Button-5>', self.on_task_scroll)
+        
+        # Also bind to scrollbar frame to catch events
+        scrollbar_frame.bind('<MouseWheel>', self.on_task_scroll)
+        scrollbar_frame.bind('<Button-4>', self.on_task_scroll)
+        scrollbar_frame.bind('<Button-5>', self.on_task_scroll)
         
         # Task action buttons with proper layout
         button_frame = tk.Frame(content, bg='#2d2d2d')
@@ -570,6 +643,85 @@ class FocusTool:
         
         logger.info("App section setup complete")
     
+    def update_scrollbar_visibility(self):
+        """Show or hide scrollbar based on content"""
+        try:
+            # Check if content exceeds visible area
+            if hasattr(self, 'task_listbox') and hasattr(self, 'task_scrollbar'):
+                # Get the number of visible items
+                visible_count = self.task_listbox.size()
+                max_visible = 6  # Height of listbox
+                
+                if visible_count > max_visible:
+                    # Show scrollbar
+                    self.task_scrollbar.pack(fill='y', expand=True)
+                else:
+                    # Hide scrollbar
+                    self.task_scrollbar.pack_forget()
+        except Exception as e:
+            logger.debug(f"Scrollbar visibility update error: {e}")
+    
+    def show_main_scrollbar(self, event):
+        """Show main scrollbar on hover"""
+        try:
+            if hasattr(self, 'main_scrollbar'):
+                self.main_scrollbar.pack(side='right', fill='y')
+        except Exception as e:
+            logger.debug(f"Show main scrollbar error: {e}")
+    
+    def hide_main_scrollbar(self, event):
+        """Hide main scrollbar when not hovering"""
+        try:
+            if hasattr(self, 'main_scrollbar'):
+                # Small delay to make hiding feel more natural
+                self.root.after(200, lambda: self.main_scrollbar.pack_forget() if hasattr(self, 'main_scrollbar') else None)
+        except Exception as e:
+            logger.debug(f"Hide main scrollbar error: {e}")
+    
+    def check_main_scrollbar_need(self):
+        """Check if main scrollbar is needed and make it available for hover"""
+        try:
+            if hasattr(self, 'main_canvas') and hasattr(self, 'main_scrollbar'):
+                # Get canvas dimensions
+                canvas_height = self.main_canvas.winfo_height()
+                scroll_region = self.main_canvas.bbox("all")
+                
+                if scroll_region:
+                    content_height = scroll_region[3] - scroll_region[1]
+                    
+                    # If content is taller than canvas, make scrollbar available for hover
+                    if content_height > canvas_height:
+                        # Don't show it yet, just make it available for hover
+                        pass
+                    else:
+                        # Content fits, no scrollbar needed
+                        self.main_scrollbar.pack_forget()
+        except Exception as e:
+            logger.debug(f"Check main scrollbar need error: {e}")
+    
+    def on_main_scroll(self, event):
+        """Handle mouse wheel scrolling for main window"""
+        try:
+            if event.num == 4 or event.delta > 0:  # Scroll up
+                self.main_canvas.yview_scroll(-1, "units")
+            elif event.num == 5 or event.delta < 0:  # Scroll down
+                self.main_canvas.yview_scroll(1, "units")
+        except Exception as e:
+            logger.debug(f"Main scroll error: {e}")
+    
+    def on_task_scroll(self, event):
+        """Handle mouse wheel scrolling for task list"""
+        try:
+            if event.num == 4 or event.delta > 0:  # Scroll up
+                self.task_listbox.yview_scroll(-1, "units")
+            elif event.num == 5 or event.delta < 0:  # Scroll down
+                self.task_listbox.yview_scroll(1, "units")
+            # Prevent event from propagating to parent widgets
+            return "break"
+        except Exception as e:
+            logger.debug(f"Task scroll error: {e}")
+            return "break"
+    
     def on_window_resize(self, event):
         if event.widget == self.root:
             # Update background canvas size
@@ -581,6 +733,9 @@ class FocusTool:
                 self.root.geometry(f"400x{event.height}")
             if event.height < 600:
                 self.root.geometry(f"{event.width}x600")
+            
+            # Check if main scrollbar is needed after resize
+            self.root.after(100, self.check_main_scrollbar_need)
             
             # Do not save on every resize; saving happens on mouse release
 
@@ -807,6 +962,9 @@ class FocusTool:
             self.task_listbox.insert(tk.END, display_text)
             if task['completed']:
                 self.task_listbox.itemconfig(i, fg='#28a745')
+        
+        # Show/hide scrollbar based on content
+        self.update_scrollbar_visibility()
     
     def launch_app(self):
         app_name = self.app_entry.get().strip()
