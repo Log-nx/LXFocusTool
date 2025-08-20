@@ -1,6 +1,6 @@
-# 🎯 Log's Little Focus Tool
+# LOGiiKx's Nifty Focus Tool 💭
 
-> A minimalist focus and productivity application.
+> A minimalist focus and productivity application for simple easy task management.
 
 ![Focus Tool](https://img.shields.io/badge/Python-3.7+-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)
@@ -11,7 +11,6 @@
 - **⏱️ Focus Timer** - Perfect for Pomodoro sessions
 - **📝 Task Management** - Add, complete, delete, and clear tasks
 - **🚀 Quick App Launcher** - Launch applications instantly
-- **🎨 Glass Style UI** - Borderless design with custom controls
 - **🔧 Fully Resizable** - Custom resize handles for perfect positioning
 - **💾 Persistent Storage** - Tasks saved automatically
 
@@ -53,7 +52,9 @@ focus-tool/
 
 The application automatically saves your preferences and tasks. Customize colors, fonts, and behavior by modifying the configuration in `focus_tool.py`.
 
-<img width="290" height="530" alt="image" src="https://github.com/user-attachments/assets/7c489023-795b-4aa8-b5cb-3468ae438786" />
+<center>
+  <img width="240" height="540" alt="image" src="https://github.com/user-attachments/assets/7c489023-795b-4aa8-b5cb-3468ae438786" />
+</center>
 
 ## 🐛 Troubleshooting
 
@@ -69,5 +70,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-
-**Built with ❤️ using Python and Tkinter**
+**Built with ❤️ using Tears😭, Python and Tkinter**
