@@ -17,7 +17,20 @@ def main():
             sys.exit(1)
         
         print("Starting Focus Tool...")
-        subprocess.run([sys.executable, focus_tool_path])
+        # On Windows, prefer pythonw.exe to hide the console window
+        python_exec = sys.executable
+        if os.name == 'nt':
+            base, exe = os.path.split(python_exec)
+            if exe.lower().startswith('python') and exe.lower().endswith('.exe'):
+                pythonw = os.path.join(base, 'pythonw.exe')
+                if os.path.exists(pythonw):
+                    python_exec = pythonw
+        # Ensure debug is off for this launcher unless user explicitly sets it
+        env = os.environ.copy()
+        env.setdefault('FOCUS_LOG_LEVEL', 'INFO')
+        env.setdefault('FOCUS_DEBUG', '0')
+        # Launch without inheriting a console window (pythonw on Windows)
+        subprocess.Popen([python_exec, focus_tool_path], env=env, shell=False)
         
     except Exception as e:
         print(f"Error launching Focus Tool: {e}")

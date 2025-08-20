@@ -10,10 +10,15 @@ from datetime import datetime, timedelta
 import subprocess
 import sys
 import math # Added for math.sin and math.cos
+import ctypes
 
-# Set up logging
+# Set up logging (default INFO; enable DEBUG with env FOCUS_DEBUG=1 or FOCUS_LOG_LEVEL=DEBUG)
+_env_level = os.getenv('FOCUS_LOG_LEVEL')
+if os.getenv('FOCUS_DEBUG', '').strip() in ('1', 'true', 'TRUE') and not _env_level:
+    _env_level = 'DEBUG'
+_level = getattr(logging, (_env_level or 'INFO').upper(), logging.INFO)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=_level,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
@@ -44,8 +49,14 @@ class StaticHexagonBackground(tk.Canvas):
         logger.info("Static hexagon grid background setup complete")
     
     def create_hexagon_grid(self):
-        canvas_width = self.winfo_width() or 450
-        canvas_height = self.winfo_height() or 700
+        # Get actual canvas dimensions, with fallback to default
+        canvas_width = self.winfo_width() or 410
+        canvas_height = self.winfo_height() or 660
+        
+        # Ensure we have valid dimensions
+        if canvas_width < 10 or canvas_height < 10:
+            canvas_width = 410
+            canvas_height = 660
         
         self.hexagons = []
         
@@ -63,9 +74,17 @@ class StaticHexagonBackground(tk.Canvas):
     
     def on_resize(self, event):
         if event.width > 1 and event.height > 1:
-            # Reduced logging for better performance
-            self.delete("hexagon")
-            self.create_hexagon_grid()
+            # Only redraw if the size actually changed significantly
+            current_width = self.winfo_width()
+            current_height = self.winfo_height()
+            
+            # Check if we need to redraw (avoid excessive redrawing)
+            if (abs(current_width - event.width) > 10 or 
+                abs(current_height - event.height) > 10):
+                # Clear existing hexagons and redraw
+                self.delete("hexagon")
+                # Small delay to ensure canvas is properly sized
+                self.after(50, self.create_hexagon_grid)
     
     def draw_hexagon(self, x, y, size):
         """Draw a hexagon at the given position with the given size"""
@@ -102,134 +121,7 @@ class StaticHexagonBackground(tk.Canvas):
         for hexagon in self.hexagons:
             self.draw_hexagon(hexagon.x, hexagon.y, hexagon.size)
 
-class CustomTitleBar(tk.Frame):
-    def __init__(self, parent, title, **kwargs):
-        super().__init__(parent, **kwargs)
-        self.parent = parent
-        self.title = title
-        self.is_expanded = True
-        logger.info(f"Initializing CustomTitleBar for {title}")
-        self.setup_title_bar()
-    
-    def setup_title_bar(self):
-        # Title bar background with glass effect
-        self.configure(bg='#1a1a1a', height=35)
-        
-        # Title text
-        title_label = tk.Label(self, text=self.title, 
-                              font=("Segoe UI", 11, "bold"),
-                              bg='#1a1a1a', fg='#ffffff')
-        title_label.pack(side='left', padx=(15, 0), pady=8)
-        
-        # Window control buttons
-        button_frame = tk.Frame(self, bg='#1a1a1a')
-        button_frame.pack(side='right', padx=(0, 10))
-        
-        # Minimize button
-        min_btn = tk.Button(button_frame, text="─", 
-                           font=("Segoe UI", 9, "bold"),
-                           bg='#1a1a1a', fg='#ffffff',
-                           relief='flat', borderwidth=0,
-                           width=4, height=1,
-                           command=self.minimize,
-                           activebackground='#333333',
-                           activeforeground='#ffffff')
-        min_btn.pack(side='left', padx=2)
-        
-        # Expand/Collapse button
-        self.expand_btn = tk.Button(button_frame, text="□", 
-                                   font=("Segoe UI", 9, "bold"),
-                                   bg='#1a1a1a', fg='#ffffff',
-                                   relief='flat', borderwidth=0,
-                                   width=4, height=1,
-                                   command=self.toggle_expand,
-                                   activebackground='#333333',
-                                   activeforeground='#ffffff')
-        self.expand_btn.pack(side='left', padx=2)
-        
-        # Close button
-        close_btn = tk.Button(button_frame, text="×", 
-                             font=("Segoe UI", 9, "bold"),
-                             bg='#1a1a1a', fg='#ffffff',
-                             relief='flat', borderwidth=0,
-                             width=4, height=1,
-                             command=self.close,
-                             activebackground='#dc3545',
-                             activeforeground='#ffffff')
-        close_btn.pack(side='left', padx=2)
-        
-        # Bind mouse events for dragging
-        self.bind('<Button-1>', self.start_drag)
-        self.bind('<B1-Motion>', self.on_drag)
-        title_label.bind('<Button-1>', self.start_drag)
-        title_label.bind('<B1-Motion>', self.on_drag)
-        
-        logger.info("Title bar setup complete")
-    
-    def start_drag(self, event):
-        self.x = event.x
-        self.y = event.y
-        # Removed logging during drag start to improve performance
-    
-    def on_drag(self, event):
-        deltax = event.x - self.x
-        deltay = event.y - self.y
-        x = self.parent.winfo_x() + deltax
-        y = self.parent.winfo_y() + deltay
-        self.parent.geometry(f"+{x}+{y}")
-        # Removed logging during drag to improve performance
-    
-    def minimize(self):
-        logger.info("Minimizing window")
-        self.parent.iconify()
-    
-    def toggle_expand(self):
-        logger.info(f"Toggle expand called. Current state: {'expanded' if self.is_expanded else 'collapsed'}")
-        
-        if self.is_expanded:
-            # Compact mode - show only title bar and timer
-            logger.info("Collapsing to compact mode")
-            self.parent.geometry("450x200")
-            self.expand_btn.config(text="□")
-            self.is_expanded = False
-            
-            # Hide task and app sections
-            if hasattr(self.parent, 'task_box'):
-                logger.info("Hiding task box")
-                self.parent.task_box.pack_forget()
-            else:
-                logger.warning("Task box not found")
-                
-            if hasattr(self.parent, 'app_box'):
-                logger.info("Hiding app box")
-                self.parent.app_box.pack_forget()
-            else:
-                logger.warning("App box not found")
-        else:
-            # Full mode - show all sections
-            logger.info("Expanding to full mode")
-            self.parent.geometry("450x700")
-            self.expand_btn.config(text="□")
-            self.is_expanded = True
-            
-            # Show task and app sections
-            if hasattr(self.parent, 'task_box'):
-                logger.info("Showing task box")
-                self.parent.task_box.pack(fill='x', pady=(0, 20))
-            else:
-                logger.warning("Task box not found")
-                
-            if hasattr(self.parent, 'app_box'):
-                logger.info("Showing app box")
-                self.parent.app_box.pack(fill='x', pady=(0, 20))
-            else:
-                logger.warning("App box not found")
-        
-        logger.info(f"Expand state changed to: {'expanded' if self.is_expanded else 'collapsed'}")
-    
-    def close(self):
-        logger.info("Closing application")
-        self.parent.quit()
+
 
 class FeatureBox(tk.Frame):
     def __init__(self, parent, title, **kwargs):
@@ -271,12 +163,15 @@ class FocusTool:
         
         logger.info("Initializing FocusTool")
         
-        # Remove default window decorations
-        self.root.overrideredirect(True)
-        
-        # Set window transparency and modern look
+        # Set window properties for modern look while maintaining taskbar presence
         self.root.attributes('-alpha', 0.95)
         self.root.configure(bg='#1e1e1e')
+        
+        # Keep Windows native title bar for proper taskbar presence
+        self.root.title("Focus Tool")
+        
+        # Ensure the window appears in the taskbar and Alt+Tab switcher
+        self.ensure_taskbar_presence()
         
         # Center the window on screen (only if no saved position)
         if not hasattr(self, 'saved_x') or not hasattr(self, 'saved_y'):
@@ -294,6 +189,8 @@ class FocusTool:
         self.load_tasks()
         self.setup_ui()
         self.update_timer_display()
+        
+        # No need for delayed Windows setup since we're keeping native title bar
         
         logger.info("FocusTool initialization complete")
     
@@ -386,19 +283,19 @@ class FocusTool:
         text_color = '#ffffff'
         secondary_text = '#b0b0b0'
         
-        # Custom title bar
-        self.title_bar = CustomTitleBar(self.root, "Focus Tool", bg='#1a1a1a')
-        self.title_bar.pack(fill='x')
-        logger.info("Title bar created and packed")
+        # No custom title bar - using Windows native one
+        logger.info("Using Windows native title bar")
         
-        # Main container with glass padding
+        # Main container with glass padding (adjusted for native title bar)
         main_frame = tk.Frame(self.root, bg=bg_color, padx=20, pady=20)
         main_frame.pack(fill='both', expand=True)
         logger.info("Main frame created and packed")
         
         # Static hexagon background - place it behind the main content
-        self.background = StaticHexagonBackground(main_frame, width=410, height=660)
+        self.background = StaticHexagonBackground(main_frame, width=410, height=680)
         self.background.place(relx=0, rely=0, relwidth=1, relheight=1)
+        # Ensure the background is visible and properly configured
+        self.background.configure(bg='#1e1e1e', highlightthickness=0)
         logger.info("Static hexagon background placed behind UI")
         
         # Configure grid weights for responsive layout
@@ -435,133 +332,14 @@ class FocusTool:
         
         self.refresh_task_list()
         
-        # Setup resize functionality
-        self.setup_resize_functionality()
-        
-        # Bind window resize event
+        # Bind window resize event (no saving here to avoid spam)
         self.root.bind('<Configure>', self.on_window_resize)
+
+        # No custom resize handles needed with native title bar
         
         logger.info("UI setup complete")
     
-    def setup_resize_functionality(self):
-        """Setup proper resize functionality for the borderless window"""
-        logger.info("Setting up resize functionality")
-        
-        # Create resize handles
-        self.create_resize_handles()
-        
-        logger.info("Resize functionality setup complete")
-    
-    def create_resize_handles(self):
-        """Create visual resize handles around the window"""
-        logger.info("Creating resize handles")
-        
-        # Create corner resize handles directly on the root window
-        self.create_corner_handle('nw', 0, 0, 10, 10)      # Top-left
-        self.create_corner_handle('ne', 1, 0, 10, 10)      # Top-right
-        self.create_corner_handle('sw', 0, 1, 10, 10)      # Bottom-left
-        self.create_corner_handle('se', 1, 1, 10, 10)      # Bottom-right
-        
-        # Create edge resize handles - make them much smaller
-        self.create_edge_handle('n', 0.5, 0, 0.1, 0.01)    # Top
-        self.create_edge_handle('s', 0.5, 1, 0.1, 0.01)    # Bottom
-        self.create_edge_handle('e', 1, 0.5, 0.01, 0.1)    # Right
-        self.create_edge_handle('w', 0, 0.5, 0.01, 0.1)    # Left
-        
-        logger.info("Resize handles created")
-    
-    def create_corner_handle(self, position, relx, rely, width, height):
-        """Create a corner resize handle"""
-        handle = tk.Frame(self.root, bg='#4a9eff', width=width, height=height)
-        handle.place(relx=relx, rely=rely, anchor='nw' if position == 'nw' else 'ne' if position == 'ne' else 'sw' if position == 'sw' else 'se')
-        handle.configure(cursor='sizing')
-        
-        # Bind resize events
-        handle.bind('<Button-1>', lambda e, pos=position: self.start_resize(e, pos))
-        handle.bind('<B1-Motion>', lambda e, pos=position: self.on_resize(e, pos))
-        
-        # Reduced logging for better performance
-    
-    def create_edge_handle(self, position, relx, rely, relwidth, relheight):
-        """Create an edge resize handle"""
-        handle = tk.Frame(self.root, bg='#4a9eff')
-        handle.place(relx=relx, rely=rely, relwidth=relwidth, relheight=relheight, anchor='center')
-        
-        if position in ['n', 's']:
-            handle.configure(cursor='sb_v_double_arrow')
-        else:
-            handle.configure(cursor='sb_h_double_arrow')
-        
-        # Bind resize events
-        handle.bind('<Button-1>', lambda e, pos=position: self.start_resize(e, pos))
-        handle.bind('<B1-Motion>', lambda e, pos=position: self.on_resize(e, pos))
-        
-        # Reduced logging for better performance
-    
-    def start_resize(self, event, position=None):
-        """Start resize operation"""
-        if not position:
-            # Determine position based on mouse location
-            x, y = event.x, event.y
-            width, height = self.root.winfo_width(), self.root.winfo_height()
-            
-            if x < 10 and y < 10:
-                position = 'nw'
-            elif x > width - 10 and y < 10:
-                position = 'ne'
-            elif x < 10 and y > height - 10:
-                position = 'sw'
-            elif x > width - 10 and y > height - 10:
-                position = 'se'
-            elif x < 10:
-                position = 'w'
-            elif x > width - 10:
-                position = 'e'
-            elif y < 10:
-                position = 'n'
-            elif y > height - 10:
-                position = 's'
-            else:
-                return  # Not on a resize area
-        
-        self.resize_position = position
-        self.start_x = event.x_root
-        self.start_y = event.y_root
-        self.start_width = self.root.winfo_width()
-        self.start_height = self.root.winfo_height()
-        
-        # Reduced logging for better performance
-    
-    def on_resize(self, event, position=None):
-        """Handle resize operation"""
-        if not hasattr(self, 'resize_position'):
-            return
-        
-        position = position or getattr(self, 'resize_position', None)
-        if not position:
-            return
-        
-        delta_x = event.x_root - self.start_x
-        delta_y = event.y_root - self.start_y
-        
-        new_width = self.start_width
-        new_height = self.start_height
-        
-        # Calculate new dimensions based on resize position
-        if position in ['e', 'ne', 'se']:
-            new_width = max(400, self.start_width + delta_x)
-        elif position in ['w', 'nw', 'sw']:
-            new_width = max(400, self.start_width - delta_x)
-        
-        if position in ['s', 'sw', 'se']:
-            new_height = max(600, self.start_height + delta_y)
-        elif position in ['n', 'nw', 'ne']:
-            new_height = max(600, self.start_height - delta_y)
-        
-        # Apply new geometry
-        if new_width != self.start_width or new_height != self.start_height:
-            self.root.geometry(f"{new_width}x{new_height}")
-            # Removed logging during resize to improve performance
+
     
     def setup_timer_section(self):
         logger.info("Setting up timer section")
@@ -804,8 +582,35 @@ class FocusTool:
             if event.height < 600:
                 self.root.geometry(f"{event.width}x600")
             
-            # Save window config after resize (but don't log every resize)
-            self.save_window_config()
+            # Do not save on every resize; saving happens on mouse release
+
+    def ensure_taskbar_presence(self):
+        # Initial setup for Windows taskbar presence
+        if os.name == 'nt':
+            try:
+                hwnd = self.root.winfo_id()
+                GWL_EXSTYLE = -20
+                WS_EX_APPWINDOW = 0x00040000
+                WS_EX_TOOLWINDOW = 0x00000080
+                SetWindowLong = ctypes.windll.user32.SetWindowLongW
+                GetWindowLong = ctypes.windll.user32.GetWindowLongW
+                SetWindowPos = ctypes.windll.user32.SetWindowPos
+                
+                # Get current extended style
+                exStyle = GetWindowLong(hwnd, GWL_EXSTYLE)
+                # Ensure it's not a tool window and has proper window styles
+                exStyle = (exStyle | WS_EX_APPWINDOW) & (~WS_EX_TOOLWINDOW)
+                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle)
+                
+                # Force a style refresh
+                SWP_FRAMECHANGED = 0x0020
+                SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FRAMECHANGED)
+                
+                logger.debug("Taskbar presence ensured")
+            except Exception as e:
+                logger.debug(f"ensure_taskbar_presence failed: {e}")
+
+
     
     def start_timer(self):
         if not self.timer_running:
