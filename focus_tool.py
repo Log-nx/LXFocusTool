@@ -186,6 +186,11 @@ class FocusTool:
         self.original_time_minutes = 50  # Store original time for completion message
         self.timer_thread = None
         
+        # Performance optimization variables
+        self.resize_timer = None
+        self.last_canvas_size = (0, 0)
+        self.background_drawn = False
+        
         self.load_tasks()
         self.setup_ui()
         self.update_timer_display()
@@ -286,55 +291,34 @@ class FocusTool:
         # No custom title bar - using Windows native one
         logger.info("Using Windows native title bar")
         
-        # Create scrollable main container with dark-mode scrollbar
+        # Create scrollable main container with clean implementation
         # Canvas for scrolling
         self.main_canvas = tk.Canvas(self.root, bg=bg_color, highlightthickness=0)
         self.main_canvas.pack(side='left', fill='both', expand=True)
         
-        # Main container with glass padding (adjusted for native title bar)
+        # Scrollbar that appears when needed
+        self.main_scrollbar = tk.Scrollbar(self.root, orient='vertical', command=self.main_canvas.yview)
+        self.main_canvas.configure(yscrollcommand=self.main_scrollbar.set)
+        
+        # Main container with transparent background to show hexagons
         main_frame = tk.Frame(self.main_canvas, bg=bg_color, padx=20, pady=20)
-        self.main_canvas.create_window((0, 0), window=main_frame, anchor='nw')
+        self.canvas_window = self.main_canvas.create_window((0, 0), window=main_frame, anchor='nw')
         
         # Configure canvas scrolling
-        main_frame.bind('<Configure>', lambda e: self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all")))
+        def configure_scroll_region(event=None):
+            self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
+            # Update canvas window width to match canvas width
+            canvas_width = self.main_canvas.winfo_width()
+            self.main_canvas.itemconfig(self.canvas_window, width=canvas_width)
         
-        # Dark-mode scrollbar for main window (only visible on hover)
-        self.main_scrollbar = tk.Scrollbar(self.root, 
-                                          orient='vertical',
-                                          bg='#606060',
-                                          activebackground='#4a9eff',
-                                          troughcolor='#2d2d2d',
-                                          width=12,
-                                          relief='flat',
-                                          borderwidth=0)
-        self.main_scrollbar.pack(side='right', fill='y')
+        main_frame.bind('<Configure>', configure_scroll_region)
+        self.main_canvas.bind('<Configure>', configure_scroll_region)
         
-        # Configure scrollbar
-        self.main_scrollbar.config(command=self.main_canvas.yview)
-        self.main_canvas.config(yscrollcommand=self.main_scrollbar.set)
-        
-        # Initially hide main scrollbar
-        self.main_scrollbar.pack_forget()
-        
-        # Bind scrollbar hover events
-        self.main_scrollbar.bind('<Enter>', self.show_main_scrollbar)
-        self.main_scrollbar.bind('<Leave>', self.hide_main_scrollbar)
-        
-        # Check if main scrollbar should be available
-        self.check_main_scrollbar_need()
-        
-        logger.info("Scrollable main frame with hover scrollbar created and packed")
-        
-        # Static hexagon background - place it behind the main content
-        self.background = StaticHexagonBackground(main_frame, width=410, height=680)
-        self.background.place(relx=0, rely=0, relwidth=1, relheight=1)
-        # Ensure the background is visible and properly configured
-        self.background.configure(bg='#1e1e1e', highlightthickness=0)
-        logger.info("Static hexagon background placed behind UI")
+        logger.info("Scrollable main frame created and packed")
         
         # Configure grid weights for responsive layout
         self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=1)
+        self.root.rowconfigure(0, weight=1)
         
         # Timer Feature Box
         self.timer_box = FeatureBox(main_frame, "Timer")
@@ -342,9 +326,9 @@ class FocusTool:
         self.setup_timer_section()
         logger.info("Timer box created and packed")
         
-        # Task Management Feature Box
+        # Task Management Feature Box - allow it to expand
         self.task_box = FeatureBox(main_frame, "Task Management")
-        self.task_box.pack(fill='x', pady=(0, 20))
+        self.task_box.pack(fill='both', expand=True, pady=(0, 20))
         self.setup_task_section()
         logger.info("Task box created and packed")
         
@@ -366,20 +350,115 @@ class FocusTool:
         
         self.refresh_task_list()
         
+        # Add hexagon background after all content is created
+        self.setup_background()
+        
         # Bind window resize event (no saving here to avoid spam)
         self.root.bind('<Configure>', self.on_window_resize)
         
-        # Bind mouse wheel scrolling for main window when hovering over content
+        # Bind mouse wheel scrolling
         self.main_canvas.bind('<MouseWheel>', self.on_main_scroll)
         self.main_canvas.bind('<Button-4>', self.on_main_scroll)
         self.main_canvas.bind('<Button-5>', self.on_main_scroll)
+        
+        # Initially check scrollbar visibility
+        self.root.after(100, self.update_scrollbar_visibility)
 
         # No custom resize handles needed with native title bar
         
         logger.info("UI setup complete")
     
-
+    def setup_background(self):
+        """Setup hexagon background that doesn't interfere with content"""
+        try:
+            # Create background directly on the canvas as a background layer
+            if hasattr(self, 'main_canvas'):
+                # Draw hexagons directly on the canvas instead of using a widget
+                self.draw_canvas_background()
+            else:
+                logger.warning("No main canvas available for background")
+                
+            logger.info("Hexagon background setup complete")
+        except Exception as e:
+            logger.error(f"Error setting up background: {e}")
     
+    def draw_canvas_background(self):
+        """Draw hexagon pattern directly on the canvas with optimization"""
+        try:
+            canvas_width = self.main_canvas.winfo_width() or 450
+            canvas_height = self.main_canvas.winfo_height() or 700
+            current_size = (canvas_width, canvas_height)
+            
+            # Skip redraw if canvas size hasn't changed significantly
+            if (abs(current_size[0] - self.last_canvas_size[0]) < 20 and 
+                abs(current_size[1] - self.last_canvas_size[1]) < 20 and 
+                self.background_drawn):
+                return
+            
+            # Clear existing hexagons efficiently
+            self.main_canvas.delete("background_hexagon")
+            
+            # Create hexagon grid pattern with optimized drawing
+            grid_spacing = 40
+            hexagon_size = 8
+            
+            # Pre-calculate hexagon points for reuse
+            hexagon_points = []
+            for i in range(6):
+                angle = i * 3.14159 / 3
+                px = hexagon_size * math.cos(angle)
+                py = hexagon_size * math.sin(angle)
+                hexagon_points.extend([px, py])
+            
+            # Batch create hexagons for better performance
+            hexagons_to_draw = []
+            for y in range(0, canvas_height + grid_spacing, grid_spacing):
+                for x in range(0, canvas_width + grid_spacing, grid_spacing):
+                    # Offset every other row for proper hexagon grid
+                    offset_x = x + (grid_spacing // 2) if (y // grid_spacing) % 2 == 1 else x
+                    hexagons_to_draw.append((offset_x, y))
+            
+            # Draw hexagons in batches to prevent UI blocking
+            self.draw_hexagons_batch(hexagons_to_draw, hexagon_points, 0)
+            
+            # Update tracking variables
+            self.last_canvas_size = current_size
+            self.background_drawn = True
+            logger.debug("Canvas background hexagons drawn (optimized)")
+        except Exception as e:
+            logger.error(f"Error drawing canvas background: {e}")
+    
+    def draw_hexagons_batch(self, hexagons_to_draw, hexagon_points, start_index):
+        """Draw hexagons in small batches to prevent UI blocking"""
+        try:
+            batch_size = 20  # Draw 20 hexagons at a time
+            end_index = min(start_index + batch_size, len(hexagons_to_draw))
+            
+            for i in range(start_index, end_index):
+                x, y = hexagons_to_draw[i]
+                # Translate hexagon points to position
+                points = []
+                for j in range(0, len(hexagon_points), 2):
+                    points.extend([x + hexagon_points[j], y + hexagon_points[j+1]])
+                
+                # Draw hexagon
+                self.main_canvas.create_polygon(
+                    points,
+                    fill='',
+                    outline='#404040',
+                    width=1,
+                    tags="background_hexagon"
+                )
+            
+            # Continue with next batch if there are more hexagons
+            if end_index < len(hexagons_to_draw):
+                self.root.after(1, lambda: self.draw_hexagons_batch(hexagons_to_draw, hexagon_points, end_index))
+                
+        except Exception as e:
+            pass  # Silently ignore drawing errors
+    
+
+
     def setup_timer_section(self):
         logger.info("Setting up timer section")
         content = self.timer_box.content_frame
@@ -510,32 +589,12 @@ class FocusTool:
                               activeforeground='#ffffff')
         add_button.pack(side='right')
         
-                # Task list with glass styling and scrollbar
+        # Task list with glass styling and proper expansion
         list_frame = tk.Frame(content, bg='#2d2d2d')
         list_frame.pack(fill='both', expand=True, padx=20, pady=(0, 15))
         
-        # Create scrollbar frame with proper spacing
-        scrollbar_frame = tk.Frame(list_frame, bg='#2d2d2d', width=12)
-        scrollbar_frame.pack(side='right', fill='y', padx=(5, 0))
-        scrollbar_frame.pack_propagate(False)
-        
-        # Mini scrollbar (only visible when needed) - make it more visible
-        self.task_scrollbar = tk.Scrollbar(scrollbar_frame, 
-                                          orient='vertical',
-                                          bg='#606060',
-                                          activebackground='#4a9eff',
-                                          troughcolor='#2d2d2d',
-                                          width=8,
-                                          relief='flat',
-                                          borderwidth=0)
-        self.task_scrollbar.pack(fill='y', expand=True)
-        
-        # Initially hide scrollbar
-        self.task_scrollbar.pack_forget()
-        
-        # Task listbox with scrollbar
+        # Task listbox without fixed height to allow proper stretching
         self.task_listbox = tk.Listbox(list_frame, 
-                                       height=6, 
                                        font=("Segoe UI", 9),
                                        bg='#1e1e1e', fg='#ffffff',
                                        selectbackground='#4a9eff',
@@ -543,22 +602,13 @@ class FocusTool:
                                        relief='flat', borderwidth=1,
                                        highlightthickness=1,
                                        highlightbackground='#4a9eff',
-                                       highlightcolor='#4a9eff',
-                                       yscrollcommand=self.task_scrollbar.set)
-        self.task_listbox.pack(side='left', fill='both', expand=True)
+                                       highlightcolor='#4a9eff')
+        self.task_listbox.pack(fill='both', expand=True)
         
-        # Configure scrollbar
-        self.task_scrollbar.config(command=self.task_listbox.yview)
-        
-        # Bind mouse wheel scrolling to both listbox and scrollbar frame
+        # Bind mouse wheel scrolling
         self.task_listbox.bind('<MouseWheel>', self.on_task_scroll)
         self.task_listbox.bind('<Button-4>', self.on_task_scroll)
         self.task_listbox.bind('<Button-5>', self.on_task_scroll)
-        
-        # Also bind to scrollbar frame to catch events
-        scrollbar_frame.bind('<MouseWheel>', self.on_task_scroll)
-        scrollbar_frame.bind('<Button-4>', self.on_task_scroll)
-        scrollbar_frame.bind('<Button-5>', self.on_task_scroll)
         
         # Task action buttons with proper layout
         button_frame = tk.Frame(content, bg='#2d2d2d')
@@ -644,71 +694,45 @@ class FocusTool:
         logger.info("App section setup complete")
     
     def update_scrollbar_visibility(self):
-        """Show or hide scrollbar based on content"""
-        try:
-            # Check if content exceeds visible area
-            if hasattr(self, 'task_listbox') and hasattr(self, 'task_scrollbar'):
-                # Get the number of visible items
-                visible_count = self.task_listbox.size()
-                max_visible = 6  # Height of listbox
-                
-                if visible_count > max_visible:
-                    # Show scrollbar
-                    self.task_scrollbar.pack(fill='y', expand=True)
-                else:
-                    # Hide scrollbar
-                    self.task_scrollbar.pack_forget()
-        except Exception as e:
-            logger.debug(f"Scrollbar visibility update error: {e}")
-    
-    def show_main_scrollbar(self, event):
-        """Show main scrollbar on hover"""
-        try:
-            if hasattr(self, 'main_scrollbar'):
-                self.main_scrollbar.pack(side='right', fill='y')
-        except Exception as e:
-            logger.debug(f"Show main scrollbar error: {e}")
-    
-    def hide_main_scrollbar(self, event):
-        """Hide main scrollbar when not hovering"""
-        try:
-            if hasattr(self, 'main_scrollbar'):
-                # Small delay to make hiding feel more natural
-                self.root.after(200, lambda: self.main_scrollbar.pack_forget() if hasattr(self, 'main_scrollbar') else None)
-        except Exception as e:
-            logger.debug(f"Hide main scrollbar error: {e}")
-    
-    def check_main_scrollbar_need(self):
-        """Check if main scrollbar is needed and make it available for hover"""
+        """Show or hide main scrollbar based on content (optimized)"""
         try:
             if hasattr(self, 'main_canvas') and hasattr(self, 'main_scrollbar'):
-                # Get canvas dimensions
+                # Update scroll region first
+                self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
+                
+                # Get canvas and content dimensions
                 canvas_height = self.main_canvas.winfo_height()
                 scroll_region = self.main_canvas.bbox("all")
                 
-                if scroll_region:
+                if scroll_region and canvas_height > 1:
                     content_height = scroll_region[3] - scroll_region[1]
                     
-                    # If content is taller than canvas, make scrollbar available for hover
-                    if content_height > canvas_height:
-                        # Don't show it yet, just make it available for hover
-                        pass
+                    # Show scrollbar if content is taller than canvas (with buffer)
+                    if content_height > canvas_height + 10:
+                        if not self.main_scrollbar.winfo_viewable():
+                            self.main_scrollbar.pack(side='right', fill='y')
                     else:
-                        # Content fits, no scrollbar needed
+                        if self.main_scrollbar.winfo_viewable():
+                            self.main_scrollbar.pack_forget()
+                else:
+                    # Hide scrollbar if no content or invalid dimensions
+                    if self.main_scrollbar.winfo_viewable():
                         self.main_scrollbar.pack_forget()
         except Exception as e:
-            logger.debug(f"Check main scrollbar need error: {e}")
+            logger.debug(f"Scrollbar visibility update error: {e}")
     
     def on_main_scroll(self, event):
         """Handle mouse wheel scrolling for main window"""
         try:
-            if event.num == 4 or event.delta > 0:  # Scroll up
-                self.main_canvas.yview_scroll(-1, "units")
-            elif event.num == 5 or event.delta < 0:  # Scroll down
-                self.main_canvas.yview_scroll(1, "units")
+            # Only scroll if scrollbar is visible (content overflows)
+            if self.main_scrollbar.winfo_viewable():
+                if event.num == 4 or event.delta > 0:  # Scroll up
+                    self.main_canvas.yview_scroll(-1, "units")
+                elif event.num == 5 or event.delta < 0:  # Scroll down
+                    self.main_canvas.yview_scroll(1, "units")
         except Exception as e:
             logger.debug(f"Main scroll error: {e}")
-    
+
     def on_task_scroll(self, event):
         """Handle mouse wheel scrolling for task list"""
         try:
@@ -724,20 +748,32 @@ class FocusTool:
     
     def on_window_resize(self, event):
         if event.widget == self.root:
-            # Update background canvas size
-            if hasattr(self, 'background'):
-                self.background.configure(width=event.width-40, height=event.height-70)
-            
             # Ensure minimum size is maintained
             if event.width < 400:
                 self.root.geometry(f"400x{event.height}")
             if event.height < 600:
                 self.root.geometry(f"{event.width}x600")
             
-            # Check if main scrollbar is needed after resize
-            self.root.after(100, self.check_main_scrollbar_need)
+            # Debounce resize events to prevent excessive redraws
+            if self.resize_timer:
+                self.root.after_cancel(self.resize_timer)
             
-            # Do not save on every resize; saving happens on mouse release
+            self.resize_timer = self.root.after(200, self.handle_resize_complete)
+    
+    def handle_resize_complete(self):
+        """Handle resize completion after debounce period"""
+        try:
+            # Redraw canvas background only after resize is complete
+            if hasattr(self, 'main_canvas'):
+                self.draw_canvas_background()
+            
+            # Update scrollbar visibility
+            self.update_scrollbar_visibility()
+            
+            # Clear resize timer
+            self.resize_timer = None
+        except Exception as e:
+            logger.debug(f"Error handling resize completion: {e}")
 
     def ensure_taskbar_presence(self):
         # Initial setup for Windows taskbar presence
@@ -963,8 +999,8 @@ class FocusTool:
             if task['completed']:
                 self.task_listbox.itemconfig(i, fg='#28a745')
         
-        # Show/hide scrollbar based on content
-        self.update_scrollbar_visibility()
+        # Update main scrollbar visibility after task list changes (debounced)
+        self.root.after(50, self.update_scrollbar_visibility)
     
     def launch_app(self):
         app_name = self.app_entry.get().strip()
