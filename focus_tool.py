@@ -1,18 +1,21 @@
+#!/usr/bin/env python3
+"""
+Focus Tool - macOS Edition
+A minimalist focus and productivity application for macOS
+"""
+
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import json
 import os
 import threading
 import time
-import random
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 import subprocess
 import sys
-import math # Added for math.sin and math.cos
-import ctypes
 
-# Set up logging (default INFO; enable DEBUG with env FOCUS_DEBUG=1 or FOCUS_LOG_LEVEL=DEBUG)
+# Set up logging
 _env_level = os.getenv('FOCUS_LOG_LEVEL')
 if os.getenv('FOCUS_DEBUG', '').strip() in ('1', 'true', 'TRUE') and not _env_level:
     _env_level = 'DEBUG'
@@ -27,103 +30,80 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class HexagonGrid:
-    def __init__(self, x, y, size):
-        self.x = x
-        self.y = y
-        self.size = size
-
-class StaticHexagonBackground(tk.Canvas):
-    def __init__(self, parent, **kwargs):
-        super().__init__(parent, **kwargs)
-        self.hexagons = []
-        self.grid_spacing = 40  # Spacing between hexagons
-        self.hexagon_size = 8   # Size of each hexagon
-        logger.info("Initializing StaticHexagonBackground with hexagon grid")
-        self.setup_background()
-    
-    def setup_background(self):
-        self.configure(bg='#1e1e1e', highlightthickness=0)
-        self.bind('<Configure>', self.on_resize)
-        self.create_hexagon_grid()
-        logger.info("Static hexagon grid background setup complete")
-    
-    def create_hexagon_grid(self):
-        # Get actual canvas dimensions, with fallback to default
-        canvas_width = self.winfo_width() or 410
-        canvas_height = self.winfo_height() or 660
+class CustomButton(tk.Frame):
+    """Custom button widget that works on macOS with proper colors"""
+    def __init__(self, parent, text="", bg="#4a9eff", fg="white", command=None, **kwargs):
+        super().__init__(parent, bg=bg, relief='raised', borderwidth=2, cursor='hand2')
         
-        # Ensure we have valid dimensions
-        if canvas_width < 10 or canvas_height < 10:
-            canvas_width = 410
-            canvas_height = 660
+        self.command = command
+        self.default_bg = bg
+        self.hover_bg = self.adjust_color(bg, 1.2)
+        self.active_bg = self.adjust_color(bg, 0.8)
         
-        self.hexagons = []
+        # Label inside frame
+        self.label = tk.Label(self, text=text, bg=bg, fg=fg,
+                            font=("Helvetica Neue", 10, "bold"),
+                            padx=20, pady=8)
+        self.label.pack(expand=True, fill='both')
         
-        # Create a regular grid of hexagons
-        for y in range(0, canvas_height + self.grid_spacing, self.grid_spacing):
-            for x in range(0, canvas_width + self.grid_spacing, self.grid_spacing):
-                # Offset every other row for proper hexagon grid
-                offset_x = x + (self.grid_spacing // 2) if (y // self.grid_spacing) % 2 == 1 else x
-                hexagon = HexagonGrid(offset_x, y, self.hexagon_size)
-                self.hexagons.append(hexagon)
-        
-        # Draw all hexagons immediately
-        self.draw_all_hexagons()
-        logger.info(f"Created and drew {len(self.hexagons)} hexagons in grid pattern")
+        # Bind events
+        self.bind('<Button-1>', self.on_click)
+        self.label.bind('<Button-1>', self.on_click)
+        self.bind('<Enter>', self.on_enter)
+        self.label.bind('<Enter>', self.on_enter)
+        self.bind('<Leave>', self.on_leave)
+        self.label.bind('<Leave>', self.on_leave)
     
-    def on_resize(self, event):
-        if event.width > 1 and event.height > 1:
-            # Only redraw if the size actually changed significantly
-            current_width = self.winfo_width()
-            current_height = self.winfo_height()
-            
-            # Check if we need to redraw (avoid excessive redrawing)
-            if (abs(current_width - event.width) > 10 or 
-                abs(current_height - event.height) > 10):
-                # Clear existing hexagons and redraw
-                self.delete("hexagon")
-                # Small delay to ensure canvas is properly sized
-                self.after(50, self.create_hexagon_grid)
-    
-    def draw_hexagon(self, x, y, size):
-        """Draw a hexagon at the given position with the given size"""
+    def adjust_color(self, hex_color, factor):
+        """Lighten or darken a color"""
         try:
-            # Validate coordinates and size
-            if not (isinstance(x, (int, float)) and isinstance(y, (int, float)) and isinstance(size, (int, float))):
-                return
-            if size <= 0:
-                return
-            
-            # Calculate hexagon points
-            points = []
-            for i in range(6):
-                angle = i * 3.14159 / 3
-                px = x + size * math.cos(angle)
-                py = y + size * math.sin(angle)
-                points.extend([px, py])
-            
-            # Use dark grey color for static grid
-            color = '#404040'  # Dark grey
-            self.create_polygon(
-                points,
-                fill='',
-                outline=color,
-                width=1,
-                tags="hexagon"
-            )
-        except Exception as e:
-            # Reduced logging for better performance
-            pass
+            hex_color = hex_color.lstrip('#')
+            r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+            r = min(255, int(r * factor))
+            g = min(255, int(g * factor))
+            b = min(255, int(b * factor))
+            return f'#{r:02x}{g:02x}{b:02x}'
+        except:
+            return hex_color
     
-    def draw_all_hexagons(self):
-        """Draw all hexagons in the grid"""
-        for hexagon in self.hexagons:
-            self.draw_hexagon(hexagon.x, hexagon.y, hexagon.size)
-
-
+    def on_click(self, event):
+        self.configure(relief='sunken')
+        self.label.configure(bg=self.active_bg)
+        self.configure(bg=self.active_bg)
+        self.after(100, self.reset_color)
+        if self.command:
+            self.command()
+    
+    def on_enter(self, event):
+        self.label.configure(bg=self.hover_bg)
+        self.configure(bg=self.hover_bg)
+    
+    def on_leave(self, event):
+        self.label.configure(bg=self.default_bg)
+        self.configure(bg=self.default_bg)
+    
+    def reset_color(self):
+        self.configure(relief='raised')
+        self.label.configure(bg=self.default_bg)
+        self.configure(bg=self.default_bg)
+    
+    def config(self, **kwargs):
+        if 'state' in kwargs:
+            state = kwargs['state']
+            if state == 'disabled':
+                self.label.configure(fg='#888888', bg='#2a2a2a')
+                self.configure(bg='#2a2a2a')
+                self.command = None
+            elif state == 'normal':
+                self.label.configure(fg='white', bg=self.default_bg)
+                self.configure(bg=self.default_bg)
+        if 'bg' in kwargs:
+            self.default_bg = kwargs['bg']
+            self.label.configure(bg=kwargs['bg'])
+            self.configure(bg=kwargs['bg'])
 
 class FeatureBox(tk.Frame):
+    """Custom frame widget with title bar for organizing features"""
     def __init__(self, parent, title, **kwargs):
         super().__init__(parent, **kwargs)
         self.title = title
@@ -131,20 +111,20 @@ class FeatureBox(tk.Frame):
         self.setup_box()
     
     def setup_box(self):
-        # Box styling with glass effect
+        # Box styling for macOS
         self.configure(bg='#2d2d2d', relief='flat', borderwidth=0)
         
-        # Title bar with glass accent
+        # Title bar
         title_frame = tk.Frame(self, bg='#4a9eff', height=28)
         title_frame.pack(fill='x', pady=(0, 1))
         title_frame.pack_propagate(False)
         
         title_label = tk.Label(title_frame, text=self.title, 
-                              font=("Segoe UI", 9, "bold"),
+                              font=("Helvetica Neue", 10, "bold"),
                               bg='#4a9eff', fg='#ffffff')
         title_label.pack(side='left', padx=12, pady=4)
         
-        # Content area with glass background
+        # Content area
         self.content_frame = tk.Frame(self, bg='#2d2d2d')
         self.content_frame.pack(fill='both', expand=True, padx=1, pady=(0, 1))
         
@@ -153,7 +133,16 @@ class FeatureBox(tk.Frame):
 class FocusTool:
     def __init__(self, root):
         self.root = root
-        self.root.title("Focus Tool")
+        self.root.title("Focus Tool - macOS")
+        
+        logger.info("Initializing FocusTool for macOS")
+        
+        # macOS fonts
+        self.default_font = "Helvetica Neue"
+        self.title_font = "Helvetica Neue"
+        
+        # Setup custom button styles for macOS
+        self.setup_button_styles()
         
         # Load saved window size or use default
         self.load_window_config()
@@ -161,43 +150,59 @@ class FocusTool:
         self.root.resizable(True, True)
         self.root.minsize(400, 600)
         
-        logger.info("Initializing FocusTool")
-        
-        # Set window properties for modern look while maintaining taskbar presence
-        self.root.attributes('-alpha', 0.95)
+        # Set dark theme colors
         self.root.configure(bg='#1e1e1e')
         
-        # Keep Windows native title bar for proper taskbar presence
-        self.root.title("Focus Tool")
+        # macOS dock integration
+        self.root.lift()
         
-        # Ensure the window appears in the taskbar and Alt+Tab switcher
-        self.ensure_taskbar_presence()
-        
-        # Center the window on screen (only if no saved position)
+        # Center window if no saved position
         if not hasattr(self, 'saved_x') or not hasattr(self, 'saved_y'):
             self.center_window()
         else:
-            # Use saved position
             self.root.geometry(f'{self.saved_width}x{self.saved_height}+{self.saved_x}+{self.saved_y}')
         
+        # Initialize data
         self.tasks = []
         self.timer_running = False
         self.time_remaining = 50 * 60
-        self.original_time_minutes = 50  # Store original time for completion message
+        self.original_time_minutes = 50
         self.timer_thread = None
-        
-        # Performance optimization variables
-        self.resize_timer = None
-        self.last_canvas_size = (0, 0)
-        self.background_drawn = False
         
         self.load_tasks()
         self.setup_ui()
         self.update_timer_display()
         
-        # No need for delayed Windows setup since we're keeping native title bar
-        
         logger.info("FocusTool initialization complete")
+    
+    def setup_button_styles(self):
+        """Setup custom ttk button styles that work on macOS"""
+        style = ttk.Style()
+        
+        # Define custom button styles with colors
+        button_configs = {
+            'Cyan.TButton': {'background': '#17a2b8', 'foreground': 'white'},
+            'Green.TButton': {'background': '#28a745', 'foreground': 'white'},
+            'Orange.TButton': {'background': '#fd7e14', 'foreground': 'white'},
+            'Purple.TButton': {'background': '#6f42c1', 'foreground': 'white'},
+            'Blue.TButton': {'background': '#4a9eff', 'foreground': 'white'},
+            'Red.TButton': {'background': '#dc3545', 'foreground': 'white'},
+            'Gray.TButton': {'background': '#6c757d', 'foreground': 'white'},
+            'Dark.TButton': {'background': '#3a3a3a', 'foreground': 'white'},
+        }
+        
+        for style_name, colors in button_configs.items():
+            style.configure(style_name,
+                          background=colors['background'],
+                          foreground=colors['foreground'],
+                          borderwidth=0,
+                          relief='flat',
+                          font=(self.default_font, 10, 'bold'))
+            style.map(style_name,
+                     background=[('active', colors['background']),
+                                ('pressed', colors['background'])])
+        
+        logger.info("Custom button styles configured")
     
     def load_window_config(self):
         """Load saved window configuration"""
@@ -210,17 +215,14 @@ class FocusTool:
                     self.saved_x = config.get('x', None)
                     self.saved_y = config.get('y', None)
                     logger.info(f"Loaded window config: {self.saved_width}x{self.saved_height}")
-                # Set initial geometry
                 self.root.geometry(f"{self.saved_width}x{self.saved_height}")
             else:
-                # Default size
                 self.saved_width = 450
                 self.saved_height = 700
                 self.root.geometry("450x700")
                 logger.info("No saved config, using default size")
         except Exception as e:
             logger.error(f"Error loading window config: {e}")
-            # Fallback to default
             self.saved_width = 450
             self.saved_height = 700
             self.root.geometry("450x700")
@@ -228,10 +230,8 @@ class FocusTool:
     def save_window_config(self):
         """Save current window configuration"""
         try:
-            # Get current window state
             geometry = self.root.geometry()
             
-            # Parse geometry string (e.g., "450x700+100+200" or "450x700")
             if 'x' in geometry:
                 parts = geometry.split('+')
                 size_part = parts[0]
@@ -239,11 +239,9 @@ class FocusTool:
                 if 'x' in size_part:
                     width, height = map(int, size_part.split('x'))
                     
-                    # Check if we have position information
                     if len(parts) >= 3:
                         x, y = map(int, parts[1:3])
                     else:
-                        # No position info, use current position
                         x = self.root.winfo_x()
                         y = self.root.winfo_y()
                     
@@ -257,14 +255,7 @@ class FocusTool:
                     with open('window_config.json', 'w') as f:
                         json.dump(config, f, indent=2)
                     
-                    # Only log when actually saving, not during the save process
                     logger.debug(f"Window config saved: {width}x{height} at ({x}, {y})")
-                else:
-                    # Reduced logging for better performance
-                    pass
-            else:
-                # Reduced logging for better performance
-                pass
                 
         except Exception as e:
             logger.error(f"Error saving window config: {e}")
@@ -279,283 +270,122 @@ class FocusTool:
         logger.info(f"Window centered at ({x}, {y}) with size {width}x{height}")
     
     def setup_ui(self):
-        logger.info("Setting up UI")
+        logger.info("Setting up macOS UI")
         
-        # Custom color scheme for glass effect
+        # Color scheme
         bg_color = '#1e1e1e'
-        frame_bg = '#2d2d2d'
-        accent_color = '#4a9eff'
-        text_color = '#ffffff'
-        secondary_text = '#b0b0b0'
         
-        # No custom title bar - using Windows native one
-        logger.info("Using Windows native title bar")
+        # Main container with scrollbar
+        container = tk.Frame(self.root, bg=bg_color)
+        container.pack(fill='both', expand=True)
         
-        # Create scrollable main container with clean implementation
+        # Scrollbar
+        scrollbar = tk.Scrollbar(container)
+        scrollbar.pack(side='right', fill='y')
+        
         # Canvas for scrolling
-        self.main_canvas = tk.Canvas(self.root, bg=bg_color, highlightthickness=0)
-        self.main_canvas.pack(side='left', fill='both', expand=True)
+        canvas = tk.Canvas(container, bg=bg_color, highlightthickness=0, yscrollcommand=scrollbar.set)
+        canvas.pack(side='left', fill='both', expand=True)
+        scrollbar.config(command=canvas.yview)
         
-        # Scrollbar that appears when needed
-        self.main_scrollbar = tk.Scrollbar(self.root, orient='vertical', command=self.main_canvas.yview)
-        self.main_canvas.configure(yscrollcommand=self.main_scrollbar.set)
+        # Main frame inside canvas
+        main_frame = tk.Frame(canvas, bg=bg_color, padx=20, pady=20)
+        canvas_window = canvas.create_window((0, 0), window=main_frame, anchor='nw')
         
-        # Main container with transparent background to show hexagons
-        main_frame = tk.Frame(self.main_canvas, bg=bg_color, padx=20, pady=20)
-        self.canvas_window = self.main_canvas.create_window((0, 0), window=main_frame, anchor='nw')
+        # Configure scrolling
+        def configure_scroll(event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas.itemconfig(canvas_window, width=canvas.winfo_width())
         
-        # Configure canvas scrolling
-        def configure_scroll_region(event=None):
-            self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
-            # Update canvas window width to match canvas width
-            canvas_width = self.main_canvas.winfo_width()
-            self.main_canvas.itemconfig(self.canvas_window, width=canvas_width)
+        main_frame.bind('<Configure>', configure_scroll)
+        canvas.bind('<Configure>', configure_scroll)
         
-        main_frame.bind('<Configure>', configure_scroll_region)
-        self.main_canvas.bind('<Configure>', configure_scroll_region)
+        # Bind mouse wheel
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", on_mousewheel)
         
-        logger.info("Scrollable main frame created and packed")
-        
-        # Configure grid weights for responsive layout
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
+        logger.info("Main frame created")
         
         # Timer Feature Box
         self.timer_box = FeatureBox(main_frame, "Timer")
         self.timer_box.pack(fill='x', pady=(0, 20))
         self.setup_timer_section()
-        logger.info("Timer box created and packed")
         
-        # Task Management Feature Box - allow it to expand
+        # Task Management Feature Box
         self.task_box = FeatureBox(main_frame, "Task Management")
         self.task_box.pack(fill='both', expand=True, pady=(0, 20))
         self.setup_task_section()
-        logger.info("Task box created and packed")
         
         # Quick Launch Feature Box
         self.app_box = FeatureBox(main_frame, "Quick Launch")
         self.app_box.pack(fill='x', pady=(0, 20))
         self.setup_app_section()
-        logger.info("App box created and packed")
         
         # Status bar
         status_frame = tk.Frame(main_frame, bg=bg_color)
         status_frame.pack(fill='x', pady=(20, 0))
         
         status_label = tk.Label(status_frame, text="Ready to focus!", 
-                               font=("Segoe UI", 9),
-                               bg=bg_color, fg=secondary_text,
+                               font=(self.default_font, 9),
+                               bg=bg_color, fg='#ffffff',
                                anchor='center')
         status_label.pack(fill='x')
         
         self.refresh_task_list()
         
-        # Add hexagon background after all content is created
-        self.setup_background()
-        
-        # Bind window resize event (no saving here to avoid spam)
-        self.root.bind('<Configure>', self.on_window_resize)
-        
-        # Bind mouse wheel scrolling
-        self.main_canvas.bind('<MouseWheel>', self.on_main_scroll)
-        self.main_canvas.bind('<Button-4>', self.on_main_scroll)
-        self.main_canvas.bind('<Button-5>', self.on_main_scroll)
-        
-        # Initially check scrollbar visibility
-        self.root.after(100, self.update_scrollbar_visibility)
-
-        # No custom resize handles needed with native title bar
-        
-        logger.info("UI setup complete")
+        logger.info("macOS UI setup complete")
     
-    def setup_background(self):
-        """Setup hexagon background that doesn't interfere with content"""
-        try:
-            # Create background directly on the canvas as a background layer
-            if hasattr(self, 'main_canvas'):
-                # Draw hexagons directly on the canvas instead of using a widget
-                self.draw_canvas_background()
-            else:
-                logger.warning("No main canvas available for background")
-                
-            logger.info("Hexagon background setup complete")
-        except Exception as e:
-            logger.error(f"Error setting up background: {e}")
-    
-    def draw_canvas_background(self):
-        """Draw hexagon pattern directly on the canvas with optimization"""
-        try:
-            canvas_width = self.main_canvas.winfo_width() or 450
-            canvas_height = self.main_canvas.winfo_height() or 700
-            current_size = (canvas_width, canvas_height)
-            
-            # Skip redraw if canvas size hasn't changed significantly
-            if (abs(current_size[0] - self.last_canvas_size[0]) < 20 and 
-                abs(current_size[1] - self.last_canvas_size[1]) < 20 and 
-                self.background_drawn):
-                return
-            
-            # Clear existing hexagons efficiently
-            self.main_canvas.delete("background_hexagon")
-            
-            # Create hexagon grid pattern with optimized drawing
-            grid_spacing = 40
-            hexagon_size = 8
-            
-            # Pre-calculate hexagon points for reuse
-            hexagon_points = []
-            for i in range(6):
-                angle = i * 3.14159 / 3
-                px = hexagon_size * math.cos(angle)
-                py = hexagon_size * math.sin(angle)
-                hexagon_points.extend([px, py])
-            
-            # Batch create hexagons for better performance
-            hexagons_to_draw = []
-            for y in range(0, canvas_height + grid_spacing, grid_spacing):
-                for x in range(0, canvas_width + grid_spacing, grid_spacing):
-                    # Offset every other row for proper hexagon grid
-                    offset_x = x + (grid_spacing // 2) if (y // grid_spacing) % 2 == 1 else x
-                    hexagons_to_draw.append((offset_x, y))
-            
-            # Draw hexagons in batches to prevent UI blocking
-            self.draw_hexagons_batch(hexagons_to_draw, hexagon_points, 0)
-            
-            # Update tracking variables
-            self.last_canvas_size = current_size
-            self.background_drawn = True
-            logger.debug("Canvas background hexagons drawn (optimized)")
-        except Exception as e:
-            logger.error(f"Error drawing canvas background: {e}")
-    
-    def draw_hexagons_batch(self, hexagons_to_draw, hexagon_points, start_index):
-        """Draw hexagons in small batches to prevent UI blocking"""
-        try:
-            batch_size = 20  # Draw 20 hexagons at a time
-            end_index = min(start_index + batch_size, len(hexagons_to_draw))
-            
-            for i in range(start_index, end_index):
-                x, y = hexagons_to_draw[i]
-                # Translate hexagon points to position
-                points = []
-                for j in range(0, len(hexagon_points), 2):
-                    points.extend([x + hexagon_points[j], y + hexagon_points[j+1]])
-                
-                # Draw hexagon
-                self.main_canvas.create_polygon(
-                    points,
-                    fill='',
-                    outline='#404040',
-                    width=1,
-                    tags="background_hexagon"
-                )
-            
-            # Continue with next batch if there are more hexagons
-            if end_index < len(hexagons_to_draw):
-                self.root.after(1, lambda: self.draw_hexagons_batch(hexagons_to_draw, hexagon_points, end_index))
-                
-        except Exception as e:
-            pass  # Silently ignore drawing errors
-    
-
-
     def setup_timer_section(self):
         logger.info("Setting up timer section")
         content = self.timer_box.content_frame
         
-        # Timer display with glass styling
-        self.timer_label = tk.Label(content, text="50:00", 
-                                   font=("Segoe UI", 42, "bold"), 
-                                   bg='#2d2d2d', fg='#4a9eff',
-                                   pady=25)
-        self.timer_label.pack(pady=(25, 25))
+        # Timer display - use lighter background for better visibility on macOS
+        timer_display_frame = tk.Frame(content, bg='#2d2d2d')
+        timer_display_frame.pack(pady=(25, 25))
         
-        # Timer selection buttons
+        self.timer_label = tk.Label(timer_display_frame, text="50:00", 
+                                   font=(self.title_font, 42, "bold"), 
+                                   bg='#2d2d2d', fg='#4a9eff')
+        self.timer_label.pack(pady=10)
+        
+        # Timer preset buttons
         time_select_frame = tk.Frame(content, bg='#2d2d2d')
         time_select_frame.pack(pady=(0, 20))
         
-        # Preset time buttons
         preset_frame = tk.Frame(time_select_frame, bg='#2d2d2d')
         preset_frame.pack()
         
-        time_20_btn = tk.Button(preset_frame, text="20m", 
-                                font=("Segoe UI", 9, "bold"),
-                                bg='#17a2b8', fg='#ffffff',
-                                relief='flat', borderwidth=0,
-                                padx=15, pady=8,
-                                command=lambda: self.set_timer(20),
-                                activebackground='#138496',
-                                activeforeground='#ffffff')
-        time_20_btn.pack(side='left', padx=(0, 10))
+        CustomButton(preset_frame, text="20m", bg='#17a2b8', 
+                    command=lambda: self.set_timer(20)).pack(side='left', padx=(0, 10))
         
-        time_50_btn = tk.Button(preset_frame, text="50m", 
-                                font=("Segoe UI", 9, "bold"),
-                                bg='#28a745', fg='#ffffff',
-                                relief='flat', borderwidth=0,
-                                padx=15, pady=8,
-                                command=lambda: self.set_timer(50),
-                                activebackground='#218838',
-                                activeforeground='#ffffff')
-        time_50_btn.pack(side='left', padx=(0, 10))
+        CustomButton(preset_frame, text="50m", bg='#28a745',
+                    command=lambda: self.set_timer(50)).pack(side='left', padx=(0, 10))
         
-        time_120_btn = tk.Button(preset_frame, text="120m", 
-                                 font=("Segoe UI", 9, "bold"),
-                                 bg='#fd7e14', fg='#ffffff',
-                                 relief='flat', borderwidth=0,
-                                 padx=15, pady=8,
-                                 command=lambda: self.set_timer(120),
-                                 activebackground='#e8690b',
-                                 activeforeground='#ffffff')
-        time_120_btn.pack(side='left', padx=(0, 10))
+        CustomButton(preset_frame, text="120m", bg='#fd7e14',
+                    command=lambda: self.set_timer(120)).pack(side='left', padx=(0, 10))
         
-        custom_btn = tk.Button(preset_frame, text="Custom", 
-                               font=("Segoe UI", 9, "bold"),
-                               bg='#6f42c1', fg='#ffffff',
-                               relief='flat', borderwidth=0,
-                               padx=15, pady=8,
-                               command=self.set_custom_timer,
-                               activebackground='#5a32a3',
-                               activeforeground='#ffffff')
-        custom_btn.pack(side='left', padx=(0, 10))
+        CustomButton(preset_frame, text="Custom", bg='#6f42c1',
+                    command=self.set_custom_timer).pack(side='left', padx=(0, 10))
         
-        # Timer control buttons with proper layout
+        # Timer control buttons
         button_frame = tk.Frame(content, bg='#2d2d2d')
         button_frame.pack(pady=(0, 25))
         
-        # Top row buttons
         top_button_frame = tk.Frame(button_frame, bg='#2d2d2d')
         top_button_frame.pack()
         
-        self.start_button = tk.Button(top_button_frame, text="Start", 
-                                     font=("Segoe UI", 10, "bold"),
-                                     bg='#4a9eff', fg='#ffffff',
-                                     relief='flat', borderwidth=0,
-                                     padx=25, pady=10,
-                                     command=self.start_timer,
-                                     activebackground='#3a8eef',
-                                     activeforeground='#ffffff')
+        self.start_button = CustomButton(top_button_frame, text="Start", 
+                                        bg='#4a9eff', command=self.start_timer)
         self.start_button.pack(side='left', padx=(0, 15))
         
-        self.stop_button = tk.Button(top_button_frame, text="Stop", 
-                                    font=("Segoe UI", 10, "bold"),
-                                    bg='#666666', fg='#ffffff',
-                                    relief='flat', borderwidth=0,
-                                    padx=25, pady=10,
-                                    state="disabled",
-                                    command=self.stop_timer,
-                                    activebackground='#555555',
-                                    activeforeground='#ffffff')
+        self.stop_button = CustomButton(top_button_frame, text="Stop", 
+                                        bg='#dc3545', command=self.stop_timer)
+        self.stop_button.config(state='disabled')
         self.stop_button.pack(side='left', padx=(15, 0))
         
-        # Reset button on separate row
-        self.reset_button = tk.Button(button_frame, text="Reset", 
-                                     font=("Segoe UI", 10, "bold"),
-                                     bg='#555555', fg='#ffffff',
-                                     relief='flat', borderwidth=0,
-                                     padx=25, pady=10,
-                                     command=self.reset_timer,
-                                     activebackground='#444444',
-                                     activeforeground='#ffffff')
+        self.reset_button = CustomButton(button_frame, text="Reset", 
+                                         bg='#6c757d', command=self.reset_timer)
         self.reset_button.pack(pady=(20, 0))
         
         logger.info("Timer section setup complete")
@@ -564,90 +394,56 @@ class FocusTool:
         logger.info("Setting up task section")
         content = self.task_box.content_frame
         
-        # Task input with glass styling
+        # Task input
         input_frame = tk.Frame(content, bg='#2d2d2d')
         input_frame.pack(fill='x', padx=20, pady=(20, 15))
         
+        # Entry with better macOS visibility
         self.task_entry = tk.Entry(input_frame, 
-                                  font=("Segoe UI", 10),
-                                  bg='#1e1e1e', fg='#ffffff',
-                                  insertbackground='#ffffff',
-                                  relief='flat', borderwidth=1,
+                                  font=(self.default_font, 10),
+                                  bg='#ffffff', fg='#000000',
+                                  insertbackground='#000000',
+                                  relief='solid', borderwidth=1,
                                   highlightthickness=1,
                                   highlightbackground='#4a9eff',
                                   highlightcolor='#4a9eff')
         self.task_entry.pack(side='left', fill='x', expand=True, padx=(0, 15))
         self.task_entry.bind('<Return>', lambda e: self.add_task())
         
-        add_button = tk.Button(input_frame, text="Add Task", 
-                              font=("Segoe UI", 10, "bold"),
-                              bg='#4a9eff', fg='#ffffff',
-                              relief='flat', borderwidth=0,
-                              padx=20, pady=8,
-                              command=self.add_task,
-                              activebackground='#3a8eef',
-                              activeforeground='#ffffff')
-        add_button.pack(side='right')
+        CustomButton(input_frame, text="Add Task", 
+                     bg='#4a9eff', command=self.add_task).pack(side='right')
         
-        # Task list with glass styling and proper expansion
+        # Task list
         list_frame = tk.Frame(content, bg='#2d2d2d')
         list_frame.pack(fill='both', expand=True, padx=20, pady=(0, 15))
         
-        # Task listbox without fixed height to allow proper stretching
+        # Listbox with better macOS visibility - use light background
         self.task_listbox = tk.Listbox(list_frame, 
-                                       font=("Segoe UI", 9),
-                                       bg='#1e1e1e', fg='#ffffff',
+                                       font=(self.default_font, 9),
+                                       bg='#f5f5f5', fg='#000000',
                                        selectbackground='#4a9eff',
                                        selectforeground='#ffffff',
-                                       relief='flat', borderwidth=1,
+                                       relief='solid', borderwidth=1,
                                        highlightthickness=1,
                                        highlightbackground='#4a9eff',
                                        highlightcolor='#4a9eff')
         self.task_listbox.pack(fill='both', expand=True)
         
-        # Bind mouse wheel scrolling
-        self.task_listbox.bind('<MouseWheel>', self.on_task_scroll)
-        self.task_listbox.bind('<Button-4>', self.on_task_scroll)
-        self.task_listbox.bind('<Button-5>', self.on_task_scroll)
-        
-        # Task action buttons with proper layout
+        # Task action buttons
         button_frame = tk.Frame(content, bg='#2d2d2d')
         button_frame.pack(pady=(0, 20))
         
-        # Top row buttons
         top_button_frame = tk.Frame(button_frame, bg='#2d2d2d')
         top_button_frame.pack()
         
-        complete_button = tk.Button(top_button_frame, text="Complete", 
-                                   font=("Segoe UI", 9, "bold"),
-                                   bg='#28a745', fg='#ffffff',
-                                   relief='flat', borderwidth=0,
-                                   padx=18, pady=8,
-                                   command=self.complete_task,
-                                   activebackground='#218838',
-                                   activeforeground='#ffffff')
-        complete_button.pack(side='left', padx=(0, 15))
+        CustomButton(top_button_frame, text="Complete", 
+                     bg='#28a745', command=self.complete_task).pack(side='left', padx=(0, 15))
         
-        delete_button = tk.Button(top_button_frame, text="Delete", 
-                                 font=("Segoe UI", 9, "bold"),
-                                 bg='#dc3545', fg='#ffffff',
-                                 relief='flat', borderwidth=0,
-                                 padx=18, pady=8,
-                                 command=self.delete_task,
-                                 activebackground='#c82333',
-                                 activeforeground='#ffffff')
-        delete_button.pack(side='left', padx=(15, 0))
+        CustomButton(top_button_frame, text="Delete", 
+                     bg='#dc3545', command=self.delete_task).pack(side='left', padx=(15, 0))
         
-        # Clear button on separate row
-        clear_button = tk.Button(button_frame, text="Clear All", 
-                                font=("Segoe UI", 9, "bold"),
-                                bg='#6c757d', fg='#ffffff',
-                                relief='flat', borderwidth=0,
-                                padx=18, pady=8,
-                                command=self.clear_tasks,
-                                activebackground='#5a6268',
-                                activeforeground='#ffffff')
-        clear_button.pack(pady=(15, 0))
+        CustomButton(button_frame, text="Clear All", 
+                     bg='#6c757d', command=self.clear_tasks).pack(pady=(15, 0))
         
         logger.info("Task section setup complete")
     
@@ -655,173 +451,47 @@ class FocusTool:
         logger.info("Setting up app section")
         content = self.app_box.content_frame
         
-        # App input with glass styling
+        # App input
         input_frame = tk.Frame(content, bg='#2d2d2d')
         input_frame.pack(fill='x', padx=20, pady=(20, 15))
         
+        # Entry with better macOS visibility
         self.app_entry = tk.Entry(input_frame, 
-                                 font=("Segoe UI", 10),
-                                 bg='#1e1e1e', fg='#ffffff',
-                                 insertbackground='#ffffff',
-                                 relief='flat', borderwidth=1,
+                                 font=(self.default_font, 10),
+                                 bg='#ffffff', fg='#000000',
+                                 insertbackground='#000000',
+                                 relief='solid', borderwidth=1,
                                  highlightthickness=1,
                                  highlightbackground='#4a9eff',
                                  highlightcolor='#4a9eff')
         self.app_entry.pack(side='left', fill='x', expand=True, padx=(0, 15))
-        self.app_entry.insert(0, "notepad.exe")
+        self.app_entry.insert(0, "TextEdit")
         
-        launch_button = tk.Button(input_frame, text="Launch App", 
-                                 font=("Segoe UI", 10, "bold"),
-                                 bg='#4a9eff', fg='#ffffff',
-                                 relief='flat', borderwidth=0,
-                                 padx=20, pady=8,
-                                 command=self.launch_app,
-                                 activebackground='#3a8eef',
-                                 activeforeground='#ffffff')
-        launch_button.pack(side='right')
+        CustomButton(input_frame, text="Launch App", 
+                     bg='#4a9eff', command=self.launch_app).pack(side='right')
         
-        # Browse button with glass styling
-        browse_button = tk.Button(content, text="Browse Files", 
-                                 font=("Segoe UI", 10, "bold"),
-                                 bg='#17a2b8', fg='#ffffff',
-                                 relief='flat', borderwidth=0,
-                                 padx=25, pady=10,
-                                 command=self.browse_app,
-                                 activebackground='#138496',
-                                 activeforeground='#ffffff')
-        browse_button.pack(pady=(0, 20))
+        CustomButton(content, text="Browse Files", 
+                     bg='#17a2b8', command=self.browse_app).pack(pady=(0, 20))
         
         logger.info("App section setup complete")
     
-    def update_scrollbar_visibility(self):
-        """Show or hide main scrollbar based on content (optimized)"""
-        try:
-            if hasattr(self, 'main_canvas') and hasattr(self, 'main_scrollbar'):
-                # Update scroll region first
-                self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
-                
-                # Get canvas and content dimensions
-                canvas_height = self.main_canvas.winfo_height()
-                scroll_region = self.main_canvas.bbox("all")
-                
-                if scroll_region and canvas_height > 1:
-                    content_height = scroll_region[3] - scroll_region[1]
-                    
-                    # Show scrollbar if content is taller than canvas (with buffer)
-                    if content_height > canvas_height + 10:
-                        if not self.main_scrollbar.winfo_viewable():
-                            self.main_scrollbar.pack(side='right', fill='y')
-                    else:
-                        if self.main_scrollbar.winfo_viewable():
-                            self.main_scrollbar.pack_forget()
-                else:
-                    # Hide scrollbar if no content or invalid dimensions
-                    if self.main_scrollbar.winfo_viewable():
-                        self.main_scrollbar.pack_forget()
-        except Exception as e:
-            logger.debug(f"Scrollbar visibility update error: {e}")
-    
-    def on_main_scroll(self, event):
-        """Handle mouse wheel scrolling for main window"""
-        try:
-            # Only scroll if scrollbar is visible (content overflows)
-            if self.main_scrollbar.winfo_viewable():
-                if event.num == 4 or event.delta > 0:  # Scroll up
-                    self.main_canvas.yview_scroll(-1, "units")
-                elif event.num == 5 or event.delta < 0:  # Scroll down
-                    self.main_canvas.yview_scroll(1, "units")
-        except Exception as e:
-            logger.debug(f"Main scroll error: {e}")
-
-    def on_task_scroll(self, event):
-        """Handle mouse wheel scrolling for task list"""
-        try:
-            if event.num == 4 or event.delta > 0:  # Scroll up
-                self.task_listbox.yview_scroll(-1, "units")
-            elif event.num == 5 or event.delta < 0:  # Scroll down
-                self.task_listbox.yview_scroll(1, "units")
-            # Prevent event from propagating to parent widgets
-            return "break"
-        except Exception as e:
-            logger.debug(f"Task scroll error: {e}")
-            return "break"
-    
-    def on_window_resize(self, event):
-        if event.widget == self.root:
-            # Ensure minimum size is maintained
-            if event.width < 400:
-                self.root.geometry(f"400x{event.height}")
-            if event.height < 600:
-                self.root.geometry(f"{event.width}x600")
-            
-            # Debounce resize events to prevent excessive redraws
-            if self.resize_timer:
-                self.root.after_cancel(self.resize_timer)
-            
-            self.resize_timer = self.root.after(200, self.handle_resize_complete)
-    
-    def handle_resize_complete(self):
-        """Handle resize completion after debounce period"""
-        try:
-            # Redraw canvas background only after resize is complete
-            if hasattr(self, 'main_canvas'):
-                self.draw_canvas_background()
-            
-            # Update scrollbar visibility
-            self.update_scrollbar_visibility()
-            
-            # Clear resize timer
-            self.resize_timer = None
-        except Exception as e:
-            logger.debug(f"Error handling resize completion: {e}")
-
-    def ensure_taskbar_presence(self):
-        # Initial setup for Windows taskbar presence
-        if os.name == 'nt':
-            try:
-                hwnd = self.root.winfo_id()
-                GWL_EXSTYLE = -20
-                WS_EX_APPWINDOW = 0x00040000
-                WS_EX_TOOLWINDOW = 0x00000080
-                SetWindowLong = ctypes.windll.user32.SetWindowLongW
-                GetWindowLong = ctypes.windll.user32.GetWindowLongW
-                SetWindowPos = ctypes.windll.user32.SetWindowPos
-                
-                # Get current extended style
-                exStyle = GetWindowLong(hwnd, GWL_EXSTYLE)
-                # Ensure it's not a tool window and has proper window styles
-                exStyle = (exStyle | WS_EX_APPWINDOW) & (~WS_EX_TOOLWINDOW)
-                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle)
-                
-                # Force a style refresh
-                SWP_FRAMECHANGED = 0x0020
-                SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FRAMECHANGED)
-                
-                logger.debug("Taskbar presence ensured")
-            except Exception as e:
-                logger.debug(f"ensure_taskbar_presence failed: {e}")
-
-
-    
+    # Timer Methods
     def start_timer(self):
         if not self.timer_running:
             logger.info("Starting timer")
             self.timer_running = True
-            self.start_button.config(state="disabled", bg='#666666')
-            self.stop_button.config(state="normal", bg='#dc3545')
+            self.start_button.config(state="disabled")
+            self.stop_button.config(state="normal")
             self.timer_thread = threading.Thread(target=self.timer_loop, daemon=True)
             self.timer_thread.start()
-        else:
-            logger.warning("Timer already running")
     
     def stop_timer(self):
         logger.info("Stopping timer")
         self.timer_running = False
-        self.start_button.config(state="normal", bg='#4a9eff')
-        self.stop_button.config(state="disabled", bg='#666666')
+        self.start_button.config(state="normal")
+        self.stop_button.config(state="disabled")
     
     def set_timer(self, minutes):
-        """Set timer to specified number of minutes"""
         logger.info(f"Setting timer to {minutes} minutes")
         self.stop_timer()
         self.time_remaining = minutes * 60
@@ -829,10 +499,8 @@ class FocusTool:
         self.update_timer_display()
     
     def set_custom_timer(self):
-        """Open dialog for custom timer input"""
         logger.info("Opening custom timer dialog")
         
-        # Create custom timer dialog
         dialog = tk.Toplevel(self.root)
         dialog.title("Custom Timer")
         dialog.geometry("300x150")
@@ -841,48 +509,34 @@ class FocusTool:
         dialog.transient(self.root)
         dialog.grab_set()
         
-        # Center dialog on parent window
         dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 75, self.root.winfo_rooty() + 275))
         
-        # Input frame
         input_frame = tk.Frame(dialog, bg='#2d2d2d')
         input_frame.pack(pady=20)
         
         tk.Label(input_frame, text="Enter minutes:", 
-                font=("Segoe UI", 10), bg='#2d2d2d', fg='#ffffff').pack()
+                font=(self.default_font, 10), bg='#2d2d2d', fg='#ffffff').pack()
         
-        time_entry = tk.Entry(input_frame, font=("Segoe UI", 12), width=10)
+        time_entry = tk.Entry(input_frame, font=(self.default_font, 12), width=10)
         time_entry.pack(pady=10)
         time_entry.focus()
         time_entry.bind('<Return>', lambda e: self.apply_custom_timer(dialog, time_entry))
         
-        # Button frame
         button_frame = tk.Frame(dialog, bg='#2d2d2d')
         button_frame.pack(pady=10)
         
-        tk.Button(button_frame, text="Set", 
-                 font=("Segoe UI", 9, "bold"),
-                 bg='#4a9eff', fg='#ffffff',
-                 relief='flat', borderwidth=0,
-                 padx=20, pady=5,
-                 command=lambda: self.apply_custom_timer(dialog, time_entry),
-                 activebackground='#3a8eef',
-                 activeforeground='#ffffff').pack(side='left', padx=(0, 10))
+        CustomButton(button_frame, text="Set", 
+                     bg='#4a9eff',
+                     command=lambda: self.apply_custom_timer(dialog, time_entry)).pack(side='left', padx=(0, 10))
         
-        tk.Button(button_frame, text="Cancel", 
-                 font=("Segoe UI", 9, "bold"),
-                 bg='#666666', fg='#ffffff',
-                 relief='flat', borderwidth=0,
-                 padx=20, pady=5,
-                 command=dialog.destroy,
-                 activebackground='#555555',
-                 activeforeground='#ffffff').pack(side='left')
+        CustomButton(button_frame, text="Cancel", 
+                     bg='#6c757d',
+                     command=dialog.destroy).pack(side='left')
     
     def apply_custom_timer(self, dialog, time_entry):
-        """Apply custom timer value from dialog"""
         try:
             minutes = int(time_entry.get().strip())
-            if minutes > 0 and minutes <= 1440:  # Max 24 hours
+            if minutes > 0 and minutes <= 1440:
                 logger.info(f"Setting custom timer to {minutes} minutes")
                 self.stop_timer()
                 self.time_remaining = minutes * 60
@@ -921,17 +575,16 @@ class FocusTool:
     def timer_complete(self):
         logger.info("Timer completed")
         self.timer_running = False
-        self.start_button.config(state="normal", bg='#4a9eff')
-        self.stop_button.config(state="disabled", bg='#666666')
+        self.start_button.config(state="normal")
+        self.stop_button.config(state="disabled")
         
-        # Use stored original time for completion message
         messagebox.showinfo("Timer Complete", f"{self.original_time_minutes}-minute focus session completed!")
         
-        # Reset to default 50 minutes
         self.time_remaining = 50 * 60
         self.original_time_minutes = 50
         self.update_timer_display()
     
+    # Task Methods
     def add_task(self):
         task_text = self.task_entry.get().strip()
         if task_text:
@@ -945,39 +598,25 @@ class FocusTool:
             self.task_entry.delete(0, tk.END)
             self.refresh_task_list()
             self.save_tasks()
-        else:
-            logger.warning("Attempted to add empty task")
     
     def complete_task(self):
         selection = self.task_listbox.curselection()
         if selection:
             index = selection[0]
             if index < len(self.tasks):
-                task_text = self.tasks[index]['text']
                 self.tasks[index]['completed'] = not self.tasks[index]['completed']
-                status = "completed" if self.tasks[index]['completed'] else "uncompleted"
-                logger.info(f"Task '{task_text}' {status}")
                 self.refresh_task_list()
                 self.save_tasks()
-            else:
-                logger.error(f"Task index {index} out of range")
-        else:
-            logger.warning("No task selected for completion")
     
     def delete_task(self):
         selection = self.task_listbox.curselection()
         if selection:
             index = selection[0]
             if index < len(self.tasks):
-                task_text = self.tasks[index]['text']
-                logger.info(f"Deleting task: {task_text}")
+                logger.info(f"Deleting task: {self.tasks[index]['text']}")
                 del self.tasks[index]
                 self.refresh_task_list()
                 self.save_tasks()
-            else:
-                logger.error(f"Task index {index} out of range")
-        else:
-            logger.warning("No task selected for deletion")
     
     def clear_tasks(self):
         logger.info("Clearing all tasks")
@@ -985,9 +624,6 @@ class FocusTool:
             self.tasks = []
             self.refresh_task_list()
             self.save_tasks()
-            logger.info("All tasks cleared")
-        else:
-            logger.info("Task clear cancelled by user")
     
     def refresh_task_list(self):
         logger.debug(f"Refreshing task list with {len(self.tasks)} tasks")
@@ -998,36 +634,32 @@ class FocusTool:
             self.task_listbox.insert(tk.END, display_text)
             if task['completed']:
                 self.task_listbox.itemconfig(i, fg='#28a745')
-        
-        # Update main scrollbar visibility after task list changes (debounced)
-        self.root.after(50, self.update_scrollbar_visibility)
     
+    # App Launcher Methods
     def launch_app(self):
         app_name = self.app_entry.get().strip()
         if app_name:
             logger.info(f"Launching application: {app_name}")
             try:
-                subprocess.Popen(app_name, shell=True)
+                subprocess.Popen(['open', '-a', app_name])
                 logger.info(f"Successfully launched {app_name}")
             except Exception as e:
                 logger.error(f"Failed to launch {app_name}: {str(e)}")
                 messagebox.showerror("Error", f"Could not launch {app_name}: {str(e)}")
-        else:
-            logger.warning("No application name provided")
     
     def browse_app(self):
         logger.info("Opening file browser")
         filename = filedialog.askopenfilename(
             title="Select Application",
-            filetypes=[("Executable files", "*.exe"), ("All files", "*.*")]
+            filetypes=[("Applications", "*.app"), ("All files", "*.*")],
+            initialdir="/Applications"
         )
         if filename:
             logger.info(f"Selected file: {filename}")
             self.app_entry.delete(0, tk.END)
             self.app_entry.insert(0, filename)
-        else:
-            logger.info("File selection cancelled")
     
+    # Data Persistence Methods
     def save_tasks(self):
         try:
             with open('tasks.json', 'w') as f:
@@ -1050,7 +682,7 @@ class FocusTool:
 
 def main():
     try:
-        logger.info("Starting Focus Tool application")
+        logger.info("Starting Focus Tool application for macOS")
         root = tk.Tk()
         app = FocusTool(root)
         
@@ -1058,7 +690,7 @@ def main():
             logger.info("Application closing")
             try:
                 app.save_tasks()
-                app.save_window_config() # Save window config on closing
+                app.save_window_config()
             except Exception as e:
                 logger.error(f"Error during cleanup: {e}")
             finally:
