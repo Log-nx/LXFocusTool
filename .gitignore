@@ -23,6 +23,9 @@ MANIFEST
 
 # Logs
 *.log
+
+# User-created launchers (should be created locally)
+*.command
 focus_tool.log
 
 # User data

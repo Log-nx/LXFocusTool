@@ -38,11 +38,24 @@ brew install python-tk@3.11
 ```
 
 #### Step 2: Run Focus Tool
+
+**🚀 Easiest Way - Double-Click Launchers:**
+```bash
+# Create the launchers (run once - creates local .command files)
+chmod +x create_both_launchers.sh
+./create_both_launchers.sh
+
+# Then simply double-click the created files:
+# - "Launch Focus Tool.command" (normal mode)
+# - "Launch Focus Tool (Debug).command" (debug mode)
+```
+
+**Alternative Methods:**
 ```bash
 # Option 1: Use the Python launcher (automatically finds correct Python)
 python3 run_focus_tool.py
 
-# Option 2: Use the shell script (recommended)
+# Option 2: Use the shell script
 chmod +x run_focus_tool.sh  # First time only
 ./run_focus_tool.sh
 
@@ -57,17 +70,21 @@ python3 run_focus_tool_debug.py
 
 ```
 LXFocusTool/
-├── focus_tool.py              # Main application
-├── run_focus_tool.py          # Python launcher (finds correct Python)
-├── run_focus_tool.sh          # Shell launcher
-├── run_focus_tool_debug.py    # Debug launcher (verbose logging)
-├── install_python_macos.sh    # Automated Python installer
-├── requirements.txt           # Dependencies (none required!)
-├── README.md                  # This file
-├── LICENSE                    # MIT License
-├── tasks.json                 # Task storage (auto-created)
-├── window_config.json         # Window size (auto-created)
-└── focus_tool.log             # Application logs (auto-created)
+├── focus_tool.py                    # Main application
+├── run_focus_tool.py                # Python launcher (finds correct Python)
+├── run_focus_tool.sh                # Shell launcher
+├── run_focus_tool_debug.py          # Debug launcher (verbose logging)
+├── create_both_launchers.sh         # Creates double-click launchers
+├── Launch Focus Tool.command        # Normal mode launcher (created locally)
+├── Launch Focus Tool (Debug).command # Debug mode launcher (created locally)
+├── install_python_macos.sh          # Automated Python installer
+├── requirements.txt                 # Dependencies (none required!)
+├── README.md                        # This file
+├── CHANGELOG.md                     # Version history
+├── LICENSE                          # MIT License
+├── tasks.json                       # Task storage (auto-created)
+├── window_config.json               # Window size (auto-created)
+└── focus_tool.log                   # Application logs (auto-created)
 ```
 
 ## 🔧 Customization
@@ -105,6 +122,7 @@ brew install python-tk@3.11
 ```
 
 ### Application won't launch
+- **Try the debug launcher**: Double-click `Launch Focus Tool (Debug).command`
 - Check the logs: `cat focus_tool.log`
 - Try debug mode: `python3 run_focus_tool_debug.py`
 - Verify Python version: `/opt/homebrew/bin/python3.11 --version`
